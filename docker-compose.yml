@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: buddies-postgres
+    environment:
+      POSTGRES_DB: buddies
+      POSTGRES_USER: buddies
+      POSTGRES_PASSWORD: buddies
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buddies -d buddies"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: buddies-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/buddies
+      SPRING_DATASOURCE_USERNAME: buddies
+      SPRING_DATASOURCE_PASSWORD: buddies
+      BUDDIES_JWT_SECRET: change-this-development-secret-change-this
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres-data:
+
