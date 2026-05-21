@@ -162,8 +162,11 @@ CREATE TABLE moderation_actions (
     admin_user_id BIGINT NOT NULL REFERENCES users(id),
     report_id BIGINT REFERENCES reports(id),
     action_type VARCHAR(30) NOT NULL,
-    reason TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    reason TEXT NOT NULL,
+    starts_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ends_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT moderation_actions_type_check CHECK (action_type IN ('WARNING', 'SUSPEND', 'BAN', 'UNSUSPEND'))
 );
 
 CREATE TABLE admin_audit_logs (
@@ -172,6 +175,7 @@ CREATE TABLE admin_audit_logs (
     action VARCHAR(120) NOT NULL,
     target_type VARCHAR(60) NOT NULL,
     target_id BIGINT,
+    metadata_json JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -182,8 +186,10 @@ CREATE INDEX idx_lobby_memberships_lobby_status ON lobby_memberships(lobby_id, s
 CREATE INDEX idx_cart_items_lobby_owner_deleted ON cart_items(lobby_id, owner_user_id, deleted_at);
 CREATE INDEX idx_payment_records_lobby_user ON payment_records(lobby_id, user_id);
 CREATE INDEX idx_chat_messages_lobby_created ON chat_messages(lobby_id, created_at);
+CREATE INDEX idx_users_status_created ON users(status, created_at);
 CREATE INDEX idx_reports_status_created ON reports(status, created_at);
 CREATE INDEX idx_reports_lobby ON reports(lobby_id);
+CREATE INDEX idx_reports_reported_status ON reports(reported_user_id, status);
 CREATE INDEX idx_ratings_unique_lookup ON ratings(lobby_id, rater_user_id, target_user_id);
+CREATE INDEX idx_moderation_actions_target_created ON moderation_actions(target_user_id, created_at);
 CREATE INDEX idx_admin_audit_logs_admin_created ON admin_audit_logs(admin_user_id, created_at);
-
