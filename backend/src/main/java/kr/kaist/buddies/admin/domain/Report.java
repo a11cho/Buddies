@@ -21,6 +21,9 @@ public class Report {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "lobby_id", nullable = false)
+    private Long lobbyId;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "reporter_user_id", nullable = false)
     private User reporter;
@@ -29,14 +32,13 @@ public class Report {
     @JoinColumn(name = "reported_user_id", nullable = false)
     private User reportedUser;
 
-    @Column(name = "lobby_id")
-    private Long lobbyId;
-
-    @Column(name = "chat_message_id")
-    private Long chatMessageId;
+    @Column(name = "reported_message_id")
+    private Long reportedMessageId;
 
     @Column(nullable = false, length = 100)
     private String reason;
+
+    private String description;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -55,15 +57,19 @@ public class Report {
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "updated_at", nullable = false, insertable = false)
+    private Instant updatedAt;
+
     protected Report() {
     }
 
-    public Report(User reporter, User reportedUser, Long lobbyId, Long chatMessageId, String reason) {
+    public Report(Long lobbyId, User reporter, User reportedUser, Long reportedMessageId, String reason, String description) {
+        this.lobbyId = lobbyId;
         this.reporter = reporter;
         this.reportedUser = reportedUser;
-        this.lobbyId = lobbyId;
-        this.chatMessageId = chatMessageId;
+        this.reportedMessageId = reportedMessageId;
         this.reason = reason;
+        this.description = description;
     }
 
     public Long getId() {
@@ -82,12 +88,16 @@ public class Report {
         return lobbyId;
     }
 
-    public Long getChatMessageId() {
-        return chatMessageId;
+    public Long getReportedMessageId() {
+        return reportedMessageId;
     }
 
     public String getReason() {
         return reason;
+    }
+
+    public String getDescription() {
+        return description;
     }
 
     public ReportStatus getStatus() {
@@ -110,8 +120,13 @@ public class Report {
         return createdAt;
     }
 
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
     public void markInReview() {
-        this.status = ReportStatus.UNDER_REVIEW;
+        this.status = ReportStatus.IN_REVIEW;
+        this.updatedAt = Instant.now();
     }
 
     public void resolve(User admin, String resolutionNote, Instant resolvedAt) {
@@ -119,5 +134,6 @@ public class Report {
         this.resolvedByAdmin = admin;
         this.resolutionNote = resolutionNote;
         this.resolvedAt = resolvedAt;
+        this.updatedAt = Instant.now();
     }
 }

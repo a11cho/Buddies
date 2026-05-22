@@ -11,30 +11,41 @@ import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/lobbies/{lobbyId}/messages")
+@RequestMapping("/api/chat")
 public class ChatController {
-    @GetMapping
+    @GetMapping("/connection")
+    public ChatConnectionResponse connection(@RequestParam Long lobbyId) {
+        // TODO: Add lobby membership authorization before issuing WebSocket connection metadata.
+        return new ChatConnectionResponse("/ws/chat", 300);
+    }
+
+    @GetMapping("/lobbies/{lobbyId}/messages")
     public List<ChatMessageResponse> list(@PathVariable Long lobbyId) {
         return List.of();
     }
 
-    @PostMapping("/media")
-    public MessageResponse uploadMedia(@PathVariable Long lobbyId) {
-        return new MessageResponse("Media upload endpoint placeholder for lobby " + lobbyId);
+    @PostMapping("/images/upload-url")
+    public ImageUploadUrlResponse uploadImageUrl(@Valid @RequestBody ImageUploadUrlRequest request) {
+        // TODO: Connect object storage pre-signed URL issuing after storage provider is selected.
+        return new ImageUploadUrlResponse(request.lobbyId(), request.filename(), "https://example.com/upload/" + request.filename());
     }
 
     @MessageMapping("/lobbies/{lobbyId}/messages")
     @SendTo("/topic/lobbies/{lobbyId}/chat")
     public ChatMessageResponse send(@DestinationVariable Long lobbyId, @Valid ChatMessageRequest request) {
-        return new ChatMessageResponse(lobbyId, 1L, request.body(), "USER", Instant.now().toString());
+        // TODO: Persist the message and apply restricted keyword filtering before broadcasting.
+        return new ChatMessageResponse(1L, lobbyId, 1L, request.content(), "USER", Instant.now().toString());
     }
 
-    public record ChatMessageRequest(@NotBlank @Size(max = 500) String body) {}
-    public record ChatMessageResponse(Long lobbyId, Long senderUserId, String body, String type, String createdAt) {}
-    public record MessageResponse(String message) {}
+    public record ChatConnectionResponse(String serverUrl, long expiresIn) {}
+    public record ImageUploadUrlRequest(Long lobbyId, @NotBlank String filename, @NotBlank String contentType) {}
+    public record ImageUploadUrlResponse(Long lobbyId, String filename, String uploadUrl) {}
+    public record ChatMessageRequest(@NotBlank @Size(max = 500) String content) {}
+    public record ChatMessageResponse(Long messageId, Long lobbyId, Long senderUserId, String content, String type, String createdAt) {}
 }
-

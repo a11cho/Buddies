@@ -25,13 +25,13 @@ public class AdminAuditLog {
     @JoinColumn(name = "admin_user_id", nullable = false)
     private User adminUser;
 
-    @Column(nullable = false, length = 120)
+    @Column(nullable = false, length = 100)
     private String action;
 
-    @Column(name = "target_type", nullable = false, length = 60)
+    @Column(name = "target_type", nullable = false, length = 50)
     private String targetType;
 
-    @Column(name = "target_id")
+    @Column(name = "target_id", nullable = false)
     private Long targetId;
 
     @Column(name = "metadata_json", columnDefinition = "jsonb")

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'api_client.dart';
 
 void main() {
   runApp(const BuddiesApp());
@@ -20,8 +21,16 @@ class BuddiesApp extends StatelessWidget {
   }
 }
 
-class LobbyBrowserScreen extends StatelessWidget {
+class LobbyBrowserScreen extends StatefulWidget {
   const LobbyBrowserScreen({super.key});
+
+  @override
+  State<LobbyBrowserScreen> createState() => _LobbyBrowserScreenState();
+}
+
+class _LobbyBrowserScreenState extends State<LobbyBrowserScreen> {
+  final BuddiesApiClient _apiClient = BuddiesApiClient();
+  late final Future<List<LobbySummary>> _lobbies = _apiClient.getLobbies();
 
   @override
   Widget build(BuildContext context) {
@@ -29,13 +38,19 @@ class LobbyBrowserScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Buddies'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: const [
-          _StatusCard(title: 'Delivery Zone', value: 'KAIST Campus'),
-          _StatusCard(title: 'Active Lobby', value: 'No active lobby'),
-          _StatusCard(title: 'Next Step', value: 'Connect REST API and WebSocket client'),
-        ],
+      body: FutureBuilder<List<LobbySummary>>(
+        future: _lobbies,
+        builder: (context, snapshot) {
+          final lobbies = snapshot.data ?? const <LobbySummary>[];
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const _StatusCard(title: 'Delivery Zone', value: 'KAIST Campus'),
+              _StatusCard(title: 'Open Lobbies', value: '${lobbies.length} loaded from API'),
+              _StatusCard(title: 'Connection', value: snapshot.hasError ? 'API unavailable' : 'REST API ready'),
+            ],
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {},
