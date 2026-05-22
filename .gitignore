@@ -20,6 +20,7 @@ mobile/coverage/
 .vscode/
 
 # Local
+.tooling/
 .env
 .env.*
 !.env.example
