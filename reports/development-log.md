@@ -299,7 +299,11 @@
   - 인증/인가 오류는 SDD 메시지 형식에 맞춰 JSON으로 반환
 
 - 개발용 OTP 발송 adapter 추가
-  - 실제 이메일 provider는 아직 연결하지 않고 `EmailOtpSender`에서 OTP를 서버 로그에 남기는 개발용 구현으로 추가
+  - `spring-boot-starter-mail` 의존성 추가
+  - `EmailOtpSender`를 `JavaMailSender` 기반 실제 SMTP 발송 구현으로 변경
+  - 이메일 발송 계정/비밀번호는 `backend/config/mail-secrets.yml`에서 읽도록 구성
+  - 실제 비밀 설정 파일은 git에 포함하지 않도록 `.gitignore`에 추가
+  - 커밋 가능한 예시 파일 `backend/config/mail-secrets.example.yml` 추가
 
 #### 수정 파일
 
@@ -313,7 +317,10 @@
 - `backend/src/main/java/kr/kaist/buddies/auth/JwtAuthenticationFilter.java`
 - `backend/src/main/java/kr/kaist/buddies/auth/JwtTokenProvider.java`
 - `backend/src/main/java/kr/kaist/buddies/config/SecurityConfig.java`
+- `backend/pom.xml`
 - `backend/src/main/resources/application.yml`
+- `backend/config/mail-secrets.example.yml`
+- `.gitignore`
 - `buddies-doc/SDD/회원가입&로그인.md`
 - `buddies-doc/SDD/API_목록_정리.md`
 - `buddies-doc/SDD/DB_목록_정리.md`
@@ -331,7 +338,6 @@
 #### 남은 작업
 
 - Maven wrapper 추가 또는 Maven 설치 후 백엔드 컴파일/테스트 실행
-- 실제 이메일 발송 provider 연동
-- 현재 개발용 `EmailOtpSender`의 OTP 로그 출력 제거 또는 개발 profile 전용으로 제한
+- 운영/테스트용 SMTP 계정 발급 및 `backend/config/mail-secrets.yml` 로컬 설정
 - refresh token 저장소 및 logout invalidation 정책 구현
 - 비밀번호 재설정 API 실제 서비스 로직 구현
