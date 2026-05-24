@@ -23,7 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
     private static final Duration OTP_TTL = Duration.ofMinutes(5);
     private static final Duration RESEND_COOLDOWN = Duration.ofSeconds(60);
-    private static final int MAX_OTP_ATTEMPTS = 5;
+    private static final int MAX_OTP_ATTEMPTS = 3;
+    private static final int MAX_PASSWORD_LENGTH = 72;
+    private static final String NAME_PATTERN = "[A-Za-z0-9가-힣 ]+";
+    private static final String PASSWORD_PATTERN = "[A-Za-z0-9!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?`~]+";
 
     private final UserRepository userRepository;
     private final PendingSignupRepository pendingSignupRepository;
@@ -75,6 +78,9 @@ public class AuthService {
     @Transactional
     public void verifySignup(String email, String otp) {
         String normalizedEmail = normalizeEmail(email);
+        if (!validKaistEmail(normalizedEmail)) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다.");
+        }
         PendingSignup pendingSignup = pendingSignupRepository.findByEmail(normalizedEmail)
             .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "회원가입 요청 정보를 찾을 수 없습니다."));
 
@@ -99,6 +105,9 @@ public class AuthService {
     @Transactional
     public void resendSignup(String email) {
         String normalizedEmail = normalizeEmail(email);
+        if (!validKaistEmail(normalizedEmail)) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다.");
+        }
         PendingSignup pendingSignup = pendingSignupRepository.findByEmail(normalizedEmail)
             .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "회원가입 요청 정보를 찾을 수 없습니다."));
 
@@ -120,7 +129,11 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public LoginResponse login(String email, String password) {
-        User user = userRepository.findByEmail(normalizeEmail(email))
+        String normalizedEmail = normalizeEmail(email);
+        if (!validKaistEmail(normalizedEmail) || password == null || password.isBlank()) {
+            throw invalidCredentials();
+        }
+        User user = userRepository.findByEmail(normalizedEmail)
             .orElseThrow(this::invalidCredentials);
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             throw invalidCredentials();
@@ -156,17 +169,31 @@ public class AuthService {
     }
 
     private void validateSignupInput(String email, String name, String password) {
-        if (email.isBlank() || name == null || name.trim().isBlank() || name.trim().length() > 100 || !validPassword(password)) {
+        if (!validKaistEmail(email) || !validName(name) || !validPassword(password)) {
             throw new AuthException(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다.");
         }
+    }
+
+    private boolean validKaistEmail(String email) {
+        return email != null && email.endsWith("@kaist.ac.kr");
+    }
+
+    private boolean validName(String name) {
+        return name != null
+            && !name.isBlank()
+            && name.equals(name.trim())
+            && name.length() <= 100
+            && name.matches(NAME_PATTERN);
     }
 
     private boolean validPassword(String password) {
         return password != null
             && password.length() >= 8
-            && password.length() <= 72
+            && password.length() <= MAX_PASSWORD_LENGTH
+            && password.matches(PASSWORD_PATTERN)
             && password.chars().anyMatch(Character::isLetter)
-            && password.chars().anyMatch(Character::isDigit);
+            && password.chars().anyMatch(Character::isDigit)
+            && password.chars().anyMatch(ch -> !Character.isLetterOrDigit(ch));
     }
 
     private String normalizeEmail(String email) {

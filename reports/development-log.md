@@ -243,6 +243,9 @@
 - 회원가입 요청 구현
   - `POST /api/auth/signup/request`가 실제 `AuthService`를 호출하도록 변경
   - 이메일 정규화, 이름/비밀번호 유효성 검사, users 이메일 중복 확인 추가
+  - SRS `REQ-AUTH-1`에 따라 회원가입/OTP/로그인 이메일을 `@kaist.ac.kr` 도메인으로 제한
+  - 이름은 영문, 한글, 숫자, 띄어쓰기만 허용하고 양 끝 공백을 거부
+  - 비밀번호는 영문, 숫자, 특수문자만 허용하고 8자 이상 및 세 종류를 각각 1개 이상 포함하도록 검증
   - 6자리 OTP 생성
   - 비밀번호는 `BCryptPasswordEncoder`로 해시 저장
   - OTP는 원문을 SHA-256 hex로 변환한 뒤 `BCryptPasswordEncoder`로 해시 저장
@@ -251,7 +254,7 @@
 
 - OTP 검증 및 계정 생성 구현
   - `POST /api/auth/signup/verify`가 pending signup을 조회해 클라이언트가 보낸 SHA-256 OTP hex 값을 검증하도록 변경
-  - OTP 만료, 최대 시도 횟수, OTP 불일치 오류 처리 추가
+  - OTP 만료, 최대 시도 횟수 3회, OTP 불일치 오류 처리 추가
   - OTP 불일치 시 `attempt_count` 증가
   - 계정 생성 직전 users 이메일 중복을 다시 확인
   - OTP 검증 성공 시 `users`에 실제 계정을 생성하고 pending signup을 삭제
