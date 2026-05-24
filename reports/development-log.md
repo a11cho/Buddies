@@ -103,7 +103,7 @@
 - DB 마이그레이션 재정렬
   - `V1__initial_schema.sql`을 최신 SDD 테이블 목록 기준으로 재작성
   - `delivery_zones`/PostGIS 기반 구조를 제거하고 `lobbies.delivery_location` 기반으로 변경
-  - `lobbies`, `lobby_memberships`, `cart_items`, `payment_records`, `chat_messages`, `chat_memberships`, `chat_archives`, `ratings`, `support_tickets`, `reports`, `moderation_actions`, `admin_audit_logs`를 최신 필드명에 맞춤
+  - `lobbies`, `lobby_memberships`, `cart_items`, `payment_records`, `chat_messages`, `chat_read_states`, `chat_archives`, `ratings`, `support_tickets`, `reports`, `moderation_actions`, `admin_audit_logs`를 최신 필드명에 맞춤
   - 주요 enum은 PostgreSQL `CHECK` 제약으로 표현
   - SDD 권장 인덱스를 PostgreSQL 형태로 추가
   - 논의가 필요한 cart item 보존 정책, restricted keyword 정책, refresh/logout token 저장 정책은 TODO 주석으로 명시
@@ -114,9 +114,9 @@
   - Profile/Rating/Support DTO를 최신 API 문서에 맞춤
   - Lobby API 경로를 `/cart/lock`, `/transfer-host`, `DELETE /lobbies/{lobbyId}` 형태로 정리
   - Cart item 삭제를 `DELETE /lobbies/{lobbyId}/cart-items/{itemId}`로 변경
-  - Payment confirm을 `PATCH /lobbies/{lobbyId}/payment-records/{paymentRecordId}/confirm`으로 변경
-  - Chat API를 `/api/chat/...` 하위로 이동하고 `/chat/connection`, `/chat/images/upload-url` 추가
-  - WebSocket endpoint를 `/ws/chat`으로 변경
+  - Payment confirm을 `POST /lobbies/{lobbyId}/payment-records/{paymentRecordId}/confirm`으로 변경
+  - Chat API를 `/api/lobbies/{lobbyId}/chat/...` 하위로 정리하고 `/chat/connection`, `/chat/upload-url`, `/chat/read-state` 추가
+  - STOMP endpoint를 `/ws`로 정리하고 destination은 `/topic/lobbies/{lobbyId}/chat`, `/app/lobbies/{lobbyId}/chat/send` 기준으로 변경
   - Admin lobby detail/payment-record endpoint 추가
   - Admin overview 응답을 최신 SDD 필드명으로 변경
 
@@ -178,25 +178,6 @@
 - Spring Security JWT 필터와 role 기반 접근 제어 구현
 - placeholder 컨트롤러를 service/repository 기반 실제 DB 로직으로 연결
 - API error response 공통 포맷 적용
-
-### 전화번호 필드 제거
-
-#### 목적
-
-사용자 계정과 프로필에서 전화번호를 사용하지 않기로 결정되어, DB/API/Entity에 남아 있던 전화번호 관련 항목을 제거했다.
-
-#### 주요 변경 사항
-
-- `users.phone_number` 컬럼 제거
-- `User.phoneNumber` 필드와 getter 제거
-- `User.updateProfile` 인자에서 `phoneNumber` 제거
-- `UpdateProfileRequest`, `ProfileResponse`에서 `phoneNumber` 제거
-- 이전 개발 기록의 `phoneNumber` 추가 표현을 일반적인 User Entity 보정 표현으로 수정
-
-#### 검증
-
-- `rg -n "phone|Phone|phone_number|phoneNumber" .` 기준 남은 전화번호 참조 없음
-- `admin-web` TypeScript 타입 검증: `cmd /c npx tsc --noEmit` 성공
 
 ### 보안 정책 기반 네트워크 통신 보강
 

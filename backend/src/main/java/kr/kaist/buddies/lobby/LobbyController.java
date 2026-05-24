@@ -50,7 +50,7 @@ public class LobbyController {
 
     @PatchMapping("/{lobbyId}/status")
     public MessageResponse updateStatus(@PathVariable Long lobbyId, @Valid @RequestBody UpdateLobbyStatusRequest request) {
-        return new MessageResponse("Lobby " + lobbyId + " status changed to " + request.orderStatus());
+        return new MessageResponse("Lobby " + lobbyId + " status changed to " + request.newStatus());
     }
 
     @PostMapping("/{lobbyId}/transfer-host")
@@ -73,12 +73,9 @@ public class LobbyController {
         @NotBlank String restaurantName,
         @NotBlank String deliveryLocation,
         @PositiveOrZero long minimumOrderAmount,
-        @PositiveOrZero long deliveryFee,
-        String hostBankAccount,
-        String tossDeepLink,
-        String kakaoPayDeepLink
+        @PositiveOrZero long deliveryFee
     ) {}
-    public record UpdateLobbyStatusRequest(@NotBlank String orderStatus) {}
+    public record UpdateLobbyStatusRequest(@NotBlank String newStatus) {}
     public record TransferHostRequest(@NotNull Long newHostUserId) {}
     public record KickMemberRequest(@NotNull Long targetUserId, String reason) {}
     public record LobbySummaryResponse(Long id, String restaurantName, String deliveryLocation, String orderStatus, boolean cartLocked) {}

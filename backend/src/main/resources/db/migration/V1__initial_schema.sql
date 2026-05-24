@@ -44,9 +44,6 @@ CREATE TABLE lobbies (
     minimum_order_amount BIGINT NOT NULL,
     current_total_amount BIGINT NOT NULL DEFAULT 0,
     delivery_fee BIGINT NOT NULL DEFAULT 0,
-    host_bank_account VARCHAR(255),
-    toss_deep_link VARCHAR(500),
-    kakao_pay_deep_link VARCHAR(500),
     order_status VARCHAR(40) NOT NULL DEFAULT 'WAITING',
     cart_locked_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -54,6 +51,9 @@ CREATE TABLE lobbies (
     deleted_at TIMESTAMPTZ,
     CONSTRAINT lobbies_order_status_check CHECK (
         order_status IN ('WAITING', 'LOCKED', 'ORDER_PLACED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CLOSED', 'CANCELED')
+    ),
+    CONSTRAINT lobbies_delivery_location_check CHECK (
+        delivery_location IN ('N3', 'N2', 'NORTH', 'WEST')
     )
 );
 
@@ -73,7 +73,7 @@ CREATE TABLE cart_items (
     id BIGSERIAL PRIMARY KEY,
     lobby_id BIGINT NOT NULL REFERENCES lobbies(id),
     owner_user_id BIGINT NOT NULL REFERENCES users(id),
-    menu_name VARCHAR(200) NOT NULL,
+    item_name VARCHAR(200) NOT NULL,
     unit_price BIGINT NOT NULL,
     quantity INTEGER NOT NULL,
     subtotal BIGINT NOT NULL,
@@ -101,7 +101,7 @@ CREATE TABLE chat_messages (
     lobby_id BIGINT NOT NULL REFERENCES lobbies(id),
     sender_user_id BIGINT REFERENCES users(id),
     message_type VARCHAR(20) NOT NULL,
-    content VARCHAR(500),
+    content TEXT,
     media_url VARCHAR(500),
     is_archived BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -109,11 +109,12 @@ CREATE TABLE chat_messages (
     -- TODO: Restricted Korean/English keyword policy is not finalized yet.
 );
 
-CREATE TABLE chat_memberships (
+CREATE TABLE chat_read_states (
     lobby_id BIGINT NOT NULL REFERENCES lobbies(id),
     user_id BIGINT NOT NULL REFERENCES users(id),
-    joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_read_message_id BIGINT REFERENCES chat_messages(id),
+    last_read_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (lobby_id, user_id)
 );
 
@@ -200,6 +201,7 @@ CREATE INDEX idx_lobby_memberships_lobby_status ON lobby_memberships(lobby_id, s
 CREATE INDEX idx_cart_items_lobby_owner ON cart_items(lobby_id, owner_user_id, deleted_at);
 CREATE UNIQUE INDEX idx_payment_records_lobby_user ON payment_records(lobby_id, user_id);
 CREATE INDEX idx_chat_messages_lobby_created_at ON chat_messages(lobby_id, created_at);
+CREATE INDEX idx_chat_read_states_user_lobby ON chat_read_states(user_id, lobby_id);
 CREATE UNIQUE INDEX idx_ratings_unique ON ratings(lobby_id, rater_user_id, target_user_id);
 CREATE INDEX idx_reports_status_created_at ON reports(status, created_at);
 CREATE INDEX idx_reports_lobby_id ON reports(lobby_id);
