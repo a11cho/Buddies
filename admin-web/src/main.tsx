@@ -1,21 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ApiClient, type SystemOverview } from './apiClient';
 import './styles.css';
 
-type Overview = {
-  activeLobbies: number;
-  openReports: number;
-  activeUsers: number;
-};
+const apiClient = new ApiClient();
 
 function App() {
-  const [overview, setOverview] = useState<Overview | null>(null);
+  const [overview, setOverview] = useState<SystemOverview | null>(null);
 
   useEffect(() => {
-    fetch('/api/admin/system/overview')
-      .then((response) => response.json())
+    apiClient
+      .getSystemOverview()
       .then(setOverview)
-      .catch(() => setOverview({ activeLobbies: 0, openReports: 0, activeUsers: 0 }));
+      .catch(() =>
+        setOverview({
+          activeLobbyCount: 0,
+          cartLockedLobbyCount: 0,
+          activeUserCount: 0,
+          openReportCount: 0,
+          suspendedUserCount: 0,
+          recentLobbies: [],
+        }),
+      );
   }, []);
 
   return (
@@ -38,15 +44,19 @@ function App() {
         <div className="metrics">
           <article>
             <span>Active Lobbies</span>
-            <strong>{overview?.activeLobbies ?? '-'}</strong>
+            <strong>{overview?.activeLobbyCount ?? '-'}</strong>
           </article>
           <article>
             <span>Open Reports</span>
-            <strong>{overview?.openReports ?? '-'}</strong>
+            <strong>{overview?.openReportCount ?? '-'}</strong>
           </article>
           <article>
             <span>Active Users</span>
-            <strong>{overview?.activeUsers ?? '-'}</strong>
+            <strong>{overview?.activeUserCount ?? '-'}</strong>
+          </article>
+          <article>
+            <span>Cart Locked</span>
+            <strong>{overview?.cartLockedLobbyCount ?? '-'}</strong>
           </article>
         </div>
         <section className="panel">
@@ -63,4 +73,3 @@ function App() {
 }
 
 createRoot(document.getElementById('root')!).render(<App />);
-

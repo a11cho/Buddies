@@ -17,17 +17,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
     @GetMapping("/users/me")
     public ProfileResponse profile() {
-        return new ProfileResponse(1L, "dev@kaist.ac.kr", "Development User", 0.0, "ACTIVE");
+        return new ProfileResponse(1L, "dev@kaist.ac.kr", "Development User", "USER", null, 0.0, "ACTIVE");
     }
 
     @PatchMapping("/users/me")
     public ProfileResponse updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
-        return new ProfileResponse(1L, "dev@kaist.ac.kr", request.name(), 0.0, "ACTIVE");
+        // TODO: Prevent user-controlled changes to email, role, trustScore, and status in service layer.
+        return new ProfileResponse(1L, "dev@kaist.ac.kr", request.name(), "USER", request.profileImageUrl(), 0.0, "ACTIVE");
     }
 
     @GetMapping("/users/me/order-history")
-    public List<OrderHistoryItem> orderHistory() {
-        return List.of();
+    public OrderHistoryResponse orderHistory() {
+        return new OrderHistoryResponse(List.of());
     }
 
     @PostMapping("/ratings")
@@ -46,11 +47,11 @@ public class UserController {
     }
 
     public record UpdateProfileRequest(@NotBlank String name, String profileImageUrl) {}
-    public record RatingRequest(Long lobbyId, Long targetUserId, @Min(1) @Max(5) int score, String comment) {}
-    public record SupportTicketRequest(String lobbyId, @NotBlank String subject, @NotBlank String body) {}
-    public record ProfileResponse(Long id, String email, String name, double trustScore, String status) {}
-    public record OrderHistoryItem(Long lobbyId, String restaurantName, String status, String completedAt) {}
+    public record RatingRequest(Long lobbyId, Long targetUserId, @Min(1) @Max(5) int rating, String feedback) {}
+    public record SupportTicketRequest(@NotBlank String category, @NotBlank String title, @NotBlank String body, Long lobbyId) {}
+    public record ProfileResponse(Long id, String email, String name, String role, String profileImageUrl, double trustScore, String status) {}
+    public record OrderHistoryResponse(List<OrderHistoryItem> items) {}
+    public record OrderHistoryItem(Long lobbyId, String restaurantName, String deliveredAt, String hostName, int participantCount, long totalAmount, long myAmount, String receiptImageUrl, boolean canRate) {}
     public record FaqResponse(String key, String answer) {}
     public record MessageResponse(String message) {}
 }
-

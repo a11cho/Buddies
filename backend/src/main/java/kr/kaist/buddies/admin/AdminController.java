@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminController {
     @PostMapping("/reports")
     public MessageResponse createReport(@Valid @RequestBody CreateReportRequest request) {
+        // TODO: Use reporter user id from JWT, not from client input.
         return new MessageResponse("Report created for user " + request.reportedUserId());
     }
 
@@ -35,8 +36,18 @@ public class AdminController {
         return new MessageResponse("Report " + reportId + " resolved");
     }
 
+    @GetMapping("/admin/lobbies/{lobbyId}")
+    public AdminLobbyResponse adminLobby(@PathVariable Long lobbyId) {
+        return new AdminLobbyResponse(lobbyId, "Sample Restaurant", "WAITING");
+    }
+
     @GetMapping("/admin/lobbies/{lobbyId}/chat-archive")
     public List<ArchiveMessageResponse> chatArchive(@PathVariable Long lobbyId) {
+        return List.of();
+    }
+
+    @GetMapping("/admin/lobbies/{lobbyId}/payment-records")
+    public List<AdminPaymentRecordResponse> adminPaymentRecords(@PathVariable Long lobbyId) {
         return List.of();
     }
 
@@ -52,21 +63,31 @@ public class AdminController {
 
     @PostMapping("/admin/users/{userId}/moderation-actions")
     public MessageResponse moderateUser(@PathVariable Long userId, @Valid @RequestBody ModerationActionRequest request) {
+        // TODO: Reject self-moderation and write admin_audit_logs in the service transaction.
         return new MessageResponse("Moderation action " + request.actionType() + " applied to user " + userId);
     }
 
     @GetMapping("/admin/system/overview")
     public SystemOverviewResponse overview() {
-        return new SystemOverviewResponse(0, 0, 0);
+        return new SystemOverviewResponse(0, 0, 0, 0, 0, List.of());
     }
 
-    public record CreateReportRequest(@NotNull Long reportedUserId, Long lobbyId, Long messageId, @NotBlank String reason) {}
+    public record CreateReportRequest(@NotNull Long lobbyId, @NotNull Long reportedUserId, Long reportedMessageId, @NotBlank String reason, String description) {}
     public record ResolveReportRequest(String resolutionNote) {}
-    public record ModerationActionRequest(@NotBlank String actionType, String reason) {}
+    public record ModerationActionRequest(@NotBlank String actionType, @NotBlank String reason, String endsAt, Long reportId) {}
     public record ReportResponse(Long id, Long reporterUserId, Long reportedUserId, String status) {}
     public record ArchiveMessageResponse(Long id, Long senderUserId, String body, String createdAt) {}
     public record AdminUserResponse(Long id, String email, String status, double trustScore) {}
-    public record SystemOverviewResponse(long activeLobbies, long openReports, long activeUsers) {}
+    public record AdminLobbyResponse(Long lobbyId, String restaurantName, String orderStatus) {}
+    public record AdminPaymentRecordResponse(Long id, Long userId, long amount, String status) {}
+    public record SystemOverviewResponse(
+        long activeLobbyCount,
+        long cartLockedLobbyCount,
+        long activeUserCount,
+        long openReportCount,
+        long suspendedUserCount,
+        List<RecentLobbyResponse> recentLobbies
+    ) {}
+    public record RecentLobbyResponse(Long lobbyId, String restaurantName, String deliveryLocation, Long hostUserId, int participantCount, long currentTotal, String orderStatus, boolean cartLocked, String createdAt) {}
     public record MessageResponse(String message) {}
 }
-
