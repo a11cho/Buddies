@@ -302,6 +302,7 @@
   - `spring-boot-starter-mail` 의존성 추가
   - `EmailOtpSender`를 `JavaMailSender` 기반 실제 SMTP 발송 구현으로 변경
   - 이메일 발송 계정/비밀번호는 `backend/config/mail-secrets.yml`에서 읽도록 구성
+  - Docker Compose 실행 시 `backend/config/mail-secrets.yml`이 컨테이너의 `/app/config/mail-secrets.yml`로 mount되도록 설정
   - 실제 비밀 설정 파일은 git에 포함하지 않도록 `.gitignore`에 추가
   - 커밋 가능한 예시 파일 `backend/config/mail-secrets.example.yml` 추가
 
@@ -318,6 +319,7 @@
 - `backend/src/main/java/kr/kaist/buddies/auth/JwtTokenProvider.java`
 - `backend/src/main/java/kr/kaist/buddies/config/SecurityConfig.java`
 - `backend/pom.xml`
+- `docker-compose.yml`
 - `backend/src/main/resources/application.yml`
 - `backend/config/mail-secrets.example.yml`
 - `.gitignore`
