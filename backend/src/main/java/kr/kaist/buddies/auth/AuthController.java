@@ -14,46 +14,49 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+    private final AuthService authService;
+
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
+
     @PostMapping("/signup/request")
     public MessageResponse requestSignup(@Valid @RequestBody SignupRequest request) {
-        // Passwords must travel only over HTTPS/TLS and be stored with bcrypt in the service layer.
-        return new MessageResponse("OTP requested for " + request.email());
+        authService.requestSignup(request.email(), request.name(), request.password());
+        return new MessageResponse("인증 코드가 이메일로 전송되었습니다.");
     }
 
     @PostMapping("/signup/verify")
     @ResponseStatus(HttpStatus.CREATED)
     public MessageResponse verifySignup(@Valid @RequestBody SignupVerifyRequest request) {
-        // The client network layer sends SHA-256 encoded OTP values.
-        return new MessageResponse("Signup verified for " + request.email());
+        authService.verifySignup(request.email(), request.otp());
+        return new MessageResponse("회원가입이 완료되었습니다.");
     }
 
     @PostMapping("/signup/resend")
     public MessageResponse resendSignup(@Valid @RequestBody EmailRequest request) {
-        return new MessageResponse("OTP resent for " + request.email());
+        authService.resendSignup(request.email());
+        return new MessageResponse("인증 코드가 이메일로 전송되었습니다.");
     }
 
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
-        // TODO: Implement password-hash verification, account-status check, and real JWT issuing.
-        return new LoginResponse("development-token", "Bearer", 3600);
+        return authService.login(request.email(), request.password());
     }
 
     @GetMapping("/me")
-    public MeResponse me() {
-        // TODO: Resolve current user from JWT subject instead of returning the development user.
-        return new MeResponse(1L, "dev@kaist.ac.kr", "Development User", "USER");
+    public MeResponse me(@CurrentUser AuthenticatedUser user) {
+        return authService.me(user.id());
     }
 
     @PostMapping("/refresh")
-    public LoginResponse refresh() {
-        // TODO: Decide refresh-token storage/revocation policy and validate refresh tokens here.
-        return new LoginResponse("development-token", "Bearer", 3600);
+    public LoginResponse refresh(@CurrentUser AuthenticatedUser user) {
+        return authService.refresh(user.id());
     }
 
     @PostMapping("/logout")
     public MessageResponse logout() {
-        // TODO: Persist revoked token id or invalidate refresh token after token strategy is finalized.
-        return new MessageResponse("Logged out");
+        return new MessageResponse("로그아웃되었습니다.");
     }
 
     @PostMapping("/password-reset/request")

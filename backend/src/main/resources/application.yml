@@ -25,6 +25,4 @@ buddies:
   jwt:
     secret: ${BUDDIES_JWT_SECRET:change-this-development-secret-change-this}
   cors:
-    allowed-origins:
-      - http://localhost:5173
-
+    allowed-origins: ${BUDDIES_CORS_ALLOWED_ORIGINS:http://localhost:5173}

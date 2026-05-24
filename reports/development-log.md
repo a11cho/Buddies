@@ -225,7 +225,113 @@
 
 #### 남은 작업
 
-- 서버 `AuthService`에서 client-provided SHA-256 OTP/reset token 값을 실제 DB hash와 비교하도록 구현
+- 서버 password reset token 검증에서 client-provided SHA-256 값을 실제 DB hash와 비교하도록 구현
 - 서버 비밀번호 저장/검증에 `BCryptPasswordEncoder` 적용
 - JWT 발급/검증 필터 및 logout token invalidation 저장소 구현
 - 모바일 JWT 저장소를 platform secure storage로 교체
+
+## 2026-05-24
+
+### 이메일 OTP 회원가입 및 JWT 로그인 서버 구현
+
+#### 목적
+
+`SDD/회원가입&로그인.md`에 정의된 이메일 OTP 기반 회원가입, pending signup 중복 처리, 이메일/비밀번호 로그인, JWT 기반 인증 흐름을 백엔드 서버에 실제 로직으로 연결했다. 기존 컨트롤러/API 경로와 DB 스키마 구조는 유지하고, `auth` 패키지 중심으로 서비스, JWT, 인증 필터, 공통 오류 응답 기능을 추가했다.
+
+#### 주요 변경 사항
+
+- 회원가입 요청 구현
+  - `POST /api/auth/signup/request`가 실제 `AuthService`를 호출하도록 변경
+  - 이메일 정규화, 이름/비밀번호 유효성 검사, users 이메일 중복 확인 추가
+  - 6자리 OTP 생성
+  - 비밀번호는 `BCryptPasswordEncoder`로 해시 저장
+  - OTP는 원문을 SHA-256 hex로 변환한 뒤 `BCryptPasswordEncoder`로 해시 저장
+  - 같은 이메일의 pending signup이 있으면 새 row를 만들지 않고 기존 row의 OTP, 만료 시간, 재전송 가능 시간, 이름, 비밀번호 해시를 갱신
+  - OTP 재요청 제한 시간 전 재요청 시 `429 Too Many Requests` 반환
+
+- OTP 검증 및 계정 생성 구현
+  - `POST /api/auth/signup/verify`가 pending signup을 조회해 클라이언트가 보낸 SHA-256 OTP hex 값을 검증하도록 변경
+  - OTP 만료, 최대 시도 횟수, OTP 불일치 오류 처리 추가
+  - OTP 불일치 시 `attempt_count` 증가
+  - 계정 생성 직전 users 이메일 중복을 다시 확인
+  - OTP 검증 성공 시 `users`에 실제 계정을 생성하고 pending signup을 삭제
+  - 계정 생성과 pending signup 삭제를 transaction 안에서 처리
+
+- OTP 재전송 구현
+  - `POST /api/auth/signup/resend` 구현
+  - 기존 pending signup이 없으면 `404 Not Found` 반환
+  - 재전송 제한 시간이 지나면 새 OTP를 발급하고 `bcrypt(sha256_hex(OTP))`로 저장하여 기존 OTP를 무효화
+  - 재전송 시 `attempt_count`를 초기화
+
+- OTP SHA-256 전송 정책 정합화
+  - 클라이언트가 OTP 원문 대신 SHA-256 hex 값을 전송하는 정책으로 통일
+  - 서버는 OTP 발급 시 `bcrypt(sha256_hex(OTP))`를 저장
+  - 서버는 OTP 검증 시 클라이언트가 보낸 SHA-256 hex 값을 저장된 bcrypt hash와 비교
+  - 관련 SDD/API/DB/보안 정책 문서를 같은 정책으로 업데이트
+
+- 로그인 및 내 정보 조회 구현
+  - `POST /api/auth/login`에서 이메일/비밀번호 검증 후 JWT access token 발급
+  - 이메일 없음과 비밀번호 불일치는 동일한 `401 Unauthorized` 메시지로 처리
+  - 비활성 상태 계정은 `403 Forbidden`으로 거부
+  - `GET /api/auth/me`가 JWT subject의 사용자 ID로 users 정보를 조회하도록 변경
+  - `POST /api/auth/refresh`는 현재 access token 기반으로 새 access token을 발급하는 초기 구현으로 연결
+  - `POST /api/auth/logout`은 SDD의 선택 API 응답 형식에 맞춰 메시지 반환
+
+- JWT 발급/검증 기능 추가
+  - HS256 기반 `JwtTokenProvider` 추가
+  - JWT payload에 `sub`, `role`, `iat`, `exp` 포함
+  - 기본 access token 유효 시간은 `3600`초로 설정하고 `buddies.jwt.expires-in-seconds`로 조정 가능하게 구성
+  - JWT 서명 검증, 만료 검증, payload 파싱 구현
+
+- Spring Security 인증/인가 적용
+  - `JwtAuthenticationFilter` 추가
+  - `Authorization: Bearer <token>` 헤더에서 JWT를 추출하고 인증 principal로 `AuthenticatedUser`를 저장
+  - `@CurrentUser` annotation을 추가해 컨트롤러에서 인증 사용자 정보를 받을 수 있게 함
+  - `/api/auth/me`, `/api/auth/refresh`, `/api/auth/logout` 인증 요구
+  - `/api/lobbies/**`, `/api/reports`, `/api/users/me`, `/api/ratings`, `/api/support/tickets` 인증 요구
+  - `/api/admin/**`는 `ADMIN` role 요구
+  - 인증 실패와 권한 실패 응답을 `{ "error": "..." }` 형식으로 반환
+
+- 공통 예외 처리 추가
+  - `AuthException`으로 HTTP 상태 코드와 오류 메시지 전달
+  - validation 오류는 `400 Bad Request`
+  - email unique constraint 충돌은 `409 Conflict`
+  - 인증/인가 오류는 SDD 메시지 형식에 맞춰 JSON으로 반환
+
+- 개발용 OTP 발송 adapter 추가
+  - 실제 이메일 provider는 아직 연결하지 않고 `EmailOtpSender`에서 OTP를 서버 로그에 남기는 개발용 구현으로 추가
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthController.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthService.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthException.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/ApiExceptionHandler.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthenticatedUser.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/CurrentUser.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/EmailOtpSender.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/JwtAuthenticationFilter.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/JwtTokenProvider.java`
+- `backend/src/main/java/kr/kaist/buddies/config/SecurityConfig.java`
+- `backend/src/main/resources/application.yml`
+- `buddies-doc/SDD/회원가입&로그인.md`
+- `buddies-doc/SDD/API_목록_정리.md`
+- `buddies-doc/SDD/DB_목록_정리.md`
+- `buddies-doc/SDD/보안_정책_정리.md`
+- `reports/development-log.md`
+
+#### 검증
+
+- `git diff --check` 성공
+- `git status --short`로 변경 파일 범위 확인
+- `rg`와 `sed`로 추가된 인증/JWT/보안 설정 위치 확인
+- 현재 환경에는 `./mvnw`와 `mvn` 명령이 없어 Maven 빌드/테스트 검증은 수행하지 못했다.
+- Java runtime은 감지되었으나 Maven 실행 도구가 없어 컴파일 검증까지 진행하지 못했다.
+
+#### 남은 작업
+
+- Maven wrapper 추가 또는 Maven 설치 후 백엔드 컴파일/테스트 실행
+- 실제 이메일 발송 provider 연동
+- 현재 개발용 `EmailOtpSender`의 OTP 로그 출력 제거 또는 개발 profile 전용으로 제한
+- refresh token 저장소 및 logout invalidation 정책 구현
+- 비밀번호 재설정 API 실제 서비스 로직 구현
