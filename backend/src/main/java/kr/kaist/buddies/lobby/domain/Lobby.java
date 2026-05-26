@@ -136,6 +136,11 @@ public class Lobby {
         this.updatedAt = lockedAt;
     }
 
+    public void updateCurrentTotalAmount(long currentTotalAmount, Instant updatedAt) {
+        this.currentTotalAmount = currentTotalAmount;
+        this.updatedAt = updatedAt;
+    }
+
     public void changeStatus(LobbyOrderStatus newStatus, Instant changedAt) {
         this.orderStatus = newStatus;
         if (newStatus == LobbyOrderStatus.CLOSED || newStatus == LobbyOrderStatus.CANCELED) {

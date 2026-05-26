@@ -3,12 +3,17 @@ package kr.kaist.buddies.lobby;
 import java.time.Instant;
 import java.util.List;
 import kr.kaist.buddies.auth.AuthException;
+import kr.kaist.buddies.chat.ChatReadService;
 import kr.kaist.buddies.lobby.LobbyController.CreateLobbyRequest;
+import kr.kaist.buddies.lobby.LobbyController.DeleteLobbyResponse;
 import kr.kaist.buddies.lobby.LobbyController.KickMemberRequest;
+import kr.kaist.buddies.lobby.LobbyController.KickParticipantResponse;
+import kr.kaist.buddies.lobby.LobbyController.LobbyStatusResponse;
 import kr.kaist.buddies.lobby.LobbyController.LobbyMembershipResponse;
 import kr.kaist.buddies.lobby.LobbyController.LobbyResponse;
 import kr.kaist.buddies.lobby.LobbyController.LobbySummaryResponse;
-import kr.kaist.buddies.lobby.LobbyController.MessageResponse;
+import kr.kaist.buddies.lobby.LobbyController.LockCartResponse;
+import kr.kaist.buddies.lobby.LobbyController.TransferHostResponse;
 import kr.kaist.buddies.lobby.LobbyController.TransferHostRequest;
 import kr.kaist.buddies.lobby.LobbyController.UpdateLobbyStatusRequest;
 import kr.kaist.buddies.lobby.domain.DeliveryLocation;
@@ -30,23 +35,29 @@ public class LobbyService {
     private final LobbyRepository lobbyRepository;
     private final LobbyMembershipRepository lobbyMembershipRepository;
     private final UserRepository userRepository;
+    private final CartService cartService;
+    private final ChatReadService chatReadService;
 
     public LobbyService(
         LobbyRepository lobbyRepository,
         LobbyMembershipRepository lobbyMembershipRepository,
-        UserRepository userRepository
+        UserRepository userRepository,
+        CartService cartService,
+        ChatReadService chatReadService
     ) {
         this.lobbyRepository = lobbyRepository;
         this.lobbyMembershipRepository = lobbyMembershipRepository;
         this.userRepository = userRepository;
+        this.cartService = cartService;
+        this.chatReadService = chatReadService;
     }
 
     @Transactional(readOnly = true)
-    public List<LobbySummaryResponse> list(String deliveryLocation, String restaurantName) {
+    public List<LobbySummaryResponse> list(Long userId, String deliveryLocation, String restaurantName) {
         DeliveryLocation location = parseDeliveryLocationOrNull(deliveryLocation);
         String normalizedRestaurantName = normalizeSearchText(restaurantName);
         return lobbyRepository.searchAvailable(location, normalizedRestaurantName).stream()
-            .map(this::toSummaryResponse)
+            .map(lobby -> toSummaryResponse(lobby, userId))
             .toList();
     }
 
@@ -64,14 +75,14 @@ public class LobbyService {
             request.deliveryFee()
         ));
         lobbyMembershipRepository.save(new LobbyMembership(lobby, host, LobbyMemberRole.HOST));
-        return toResponse(lobby);
+        return toResponse(lobby, userId);
     }
 
     @Transactional(readOnly = true)
     public LobbyResponse get(Long userId, Long lobbyId) {
         Lobby lobby = findLobby(lobbyId);
         requireActiveMember(lobbyId, userId);
-        return toResponse(lobby);
+        return toResponse(lobby, userId);
     }
 
     @Transactional
@@ -99,11 +110,12 @@ public class LobbyService {
         }
 
         membership.leave(Instant.now());
+        cartService.deleteActiveItemsOwnedBy(lobbyId, userId);
         return toMembershipResponse(membership);
     }
 
     @Transactional
-    public MessageResponse lockCart(Long userId, Long lobbyId) {
+    public LockCartResponse lockCart(Long userId, Long lobbyId) {
         Lobby lobby = findLobby(lobbyId);
         requireHost(lobbyId, userId);
         if (!lobby.isOpenForJoin()) {
@@ -113,25 +125,30 @@ public class LobbyService {
             throw new AuthException(HttpStatus.CONFLICT, "최소 주문 금액을 충족하지 못했습니다.");
         }
 
+        String previousStatus = lobby.getOrderStatus().name();
         lobby.lockCart(Instant.now());
-        return new MessageResponse("Cart locked for lobby " + lobbyId);
+        return new LockCartResponse(lobbyId, previousStatus, lobby.getOrderStatus().name(), lobby.getCartLockedAt().toString());
     }
 
     @Transactional
-    public MessageResponse updateStatus(Long userId, Long lobbyId, UpdateLobbyStatusRequest request) {
+    public LobbyStatusResponse updateStatus(Long userId, Long lobbyId, UpdateLobbyStatusRequest request) {
         Lobby lobby = findLobby(lobbyId);
         requireHost(lobbyId, userId);
         LobbyOrderStatus nextStatus = parseOrderStatus(request.newStatus());
         validateStatusTransition(lobby, nextStatus);
 
+        String previousStatus = lobby.getOrderStatus().name();
         lobby.changeStatus(nextStatus, Instant.now());
-        return new MessageResponse("Lobby " + lobbyId + " status changed to " + nextStatus.name());
+        return new LobbyStatusResponse(lobbyId, previousStatus, nextStatus.name());
     }
 
     @Transactional
-    public MessageResponse transferHost(Long userId, Long lobbyId, TransferHostRequest request) {
+    public TransferHostResponse transferHost(Long userId, Long lobbyId, TransferHostRequest request) {
         Lobby lobby = findLobby(lobbyId);
         LobbyMembership currentHost = requireHost(lobbyId, userId);
+        if (lobby.getOrderStatus() != LobbyOrderStatus.WAITING || lobby.isCartLocked()) {
+            throw new AuthException(HttpStatus.CONFLICT, "현재 로비 상태에서는 Host 권한을 위임할 수 없습니다.");
+        }
         LobbyMembership newHost = lobbyMembershipRepository
             .findByLobby_IdAndUser_IdAndStatus(lobbyId, request.newHostUserId(), LobbyMembershipStatus.ACTIVE)
             .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "위임할 참여자를 찾을 수 없습니다."));
@@ -143,13 +160,26 @@ public class LobbyService {
         currentHost.removeByTransfer(now);
         newHost.makeHost();
         lobby.transferHost(newHost.getUser(), now);
-        return new MessageResponse("Lobby " + lobbyId + " host transferred to " + request.newHostUserId());
+        cartService.deleteActiveItemsOwnedBy(lobbyId, userId);
+        return new TransferHostResponse(
+            lobbyId,
+            userId,
+            request.newHostUserId(),
+            currentHost.getStatus().name(),
+            newHost.getRoleInLobby().name()
+        );
     }
 
     @Transactional
-    public MessageResponse kick(Long userId, Long lobbyId, KickMemberRequest request) {
-        findLobby(lobbyId);
+    public KickParticipantResponse kick(Long userId, Long lobbyId, KickMemberRequest request) {
+        Lobby lobby = findLobby(lobbyId);
         requireHost(lobbyId, userId);
+        if (lobby.getOrderStatus() == LobbyOrderStatus.ORDER_PLACED
+            || lobby.getOrderStatus() == LobbyOrderStatus.OUT_FOR_DELIVERY
+            || lobby.getOrderStatus() == LobbyOrderStatus.DELIVERED
+            || lobby.isClosedOrCanceled()) {
+            throw new AuthException(HttpStatus.CONFLICT, "현재 로비 상태에서는 참여자를 강퇴할 수 없습니다.");
+        }
         LobbyMembership target = lobbyMembershipRepository
             .findByLobby_IdAndUser_IdAndStatus(lobbyId, request.targetUserId(), LobbyMembershipStatus.ACTIVE)
             .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "강퇴할 참여자를 찾을 수 없습니다."));
@@ -158,13 +188,15 @@ public class LobbyService {
         }
 
         target.kick(Instant.now());
-        return new MessageResponse("User " + request.targetUserId() + " kicked from lobby " + lobbyId);
+        cartService.deleteActiveItemsOwnedBy(lobbyId, request.targetUserId());
+        return new KickParticipantResponse(lobbyId, request.targetUserId(), target.getStatus().name(), userId);
     }
 
     @Transactional
-    public MessageResponse delete(Long userId, Long lobbyId) {
+    public DeleteLobbyResponse delete(Long userId, Long lobbyId) {
         Lobby lobby = findLobby(lobbyId);
         requireHost(lobbyId, userId);
+        String previousStatus = lobby.getOrderStatus().name();
         LobbyOrderStatus nextStatus;
         if (lobby.getOrderStatus() == LobbyOrderStatus.WAITING && !lobby.isCartLocked()) {
             nextStatus = LobbyOrderStatus.CANCELED;
@@ -175,7 +207,7 @@ public class LobbyService {
         }
 
         lobby.changeStatus(nextStatus, Instant.now());
-        return new MessageResponse("Lobby " + lobbyId + " " + nextStatus.name().toLowerCase());
+        return new DeleteLobbyResponse(lobbyId, previousStatus, nextStatus.name(), lobby.getDeletedAt().toString());
     }
 
     private Lobby findLobby(Long lobbyId) {
@@ -260,9 +292,10 @@ public class LobbyService {
         return value.trim();
     }
 
-    private LobbySummaryResponse toSummaryResponse(Lobby lobby) {
+    private LobbySummaryResponse toSummaryResponse(Lobby lobby, Long userId) {
         long participantCount = lobbyMembershipRepository.countByLobby_IdAndStatus(lobby.getId(), LobbyMembershipStatus.ACTIVE);
         long remainingAmount = Math.max(0, lobby.getMinimumOrderAmount() - lobby.getCurrentTotalAmount());
+        ReadState readState = readStateFor(lobby.getId(), userId);
         return new LobbySummaryResponse(
             lobby.getId(),
             lobby.getHost().getId(),
@@ -274,11 +307,15 @@ public class LobbyService {
             lobby.getCurrentTotalAmount(),
             remainingAmount,
             participantCount,
-            lobby.getOrderStatus().name()
+            lobby.getOrderStatus().name(),
+            readState.lastReadMessageId(),
+            readState.unreadCount()
         );
     }
 
-    private LobbyResponse toResponse(Lobby lobby) {
+    private LobbyResponse toResponse(Lobby lobby, Long userId) {
+        long participantCount = lobbyMembershipRepository.countByLobby_IdAndStatus(lobby.getId(), LobbyMembershipStatus.ACTIVE);
+        ReadState readState = readStateFor(lobby.getId(), userId);
         return new LobbyResponse(
             lobby.getId(),
             lobby.getHost().getId(),
@@ -287,8 +324,11 @@ public class LobbyService {
             lobby.getMinimumOrderAmount(),
             lobby.getCurrentTotalAmount(),
             lobby.getDeliveryFee(),
+            participantCount,
             lobby.getOrderStatus().name(),
-            lobby.getCartLockedAt() == null ? null : lobby.getCartLockedAt().toString()
+            lobby.getCartLockedAt() == null ? null : lobby.getCartLockedAt().toString(),
+            readState.lastReadMessageId(),
+            readState.unreadCount()
         );
     }
 
@@ -302,4 +342,15 @@ public class LobbyService {
             membership.getLeftAt() == null ? null : membership.getLeftAt().toString()
         );
     }
+
+    private ReadState readStateFor(Long lobbyId, Long userId) {
+        return lobbyMembershipRepository.findByLobby_IdAndUser_IdAndStatus(lobbyId, userId, LobbyMembershipStatus.ACTIVE)
+            .map(membership -> new ReadState(
+                membership.getLastReadMessageId(),
+                chatReadService.countUnread(lobbyId, membership.getLastReadMessageId())
+            ))
+            .orElse(new ReadState(null, 0));
+    }
+
+    private record ReadState(Long lastReadMessageId, long unreadCount) {}
 }

@@ -28,10 +28,11 @@ public class LobbyController {
 
     @GetMapping
     public List<LobbySummaryResponse> list(
+        @CurrentUser AuthenticatedUser user,
         @RequestParam(required = false) String deliveryLocation,
         @RequestParam(required = false) String restaurantName
     ) {
-        return lobbyService.list(deliveryLocation, restaurantName);
+        return lobbyService.list(user.id(), deliveryLocation, restaurantName);
     }
 
     @PostMapping
@@ -55,27 +56,27 @@ public class LobbyController {
     }
 
     @PostMapping("/{lobbyId}/cart/lock")
-    public MessageResponse lockCart(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+    public LockCartResponse lockCart(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
         return lobbyService.lockCart(user.id(), lobbyId);
     }
 
     @PatchMapping("/{lobbyId}/status")
-    public MessageResponse updateStatus(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @Valid @RequestBody UpdateLobbyStatusRequest request) {
+    public LobbyStatusResponse updateStatus(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @Valid @RequestBody UpdateLobbyStatusRequest request) {
         return lobbyService.updateStatus(user.id(), lobbyId, request);
     }
 
     @PostMapping("/{lobbyId}/transfer-host")
-    public MessageResponse transferHost(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @Valid @RequestBody TransferHostRequest request) {
+    public TransferHostResponse transferHost(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @Valid @RequestBody TransferHostRequest request) {
         return lobbyService.transferHost(user.id(), lobbyId, request);
     }
 
     @PostMapping("/{lobbyId}/kick")
-    public MessageResponse kick(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @Valid @RequestBody KickMemberRequest request) {
+    public KickParticipantResponse kick(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @Valid @RequestBody KickMemberRequest request) {
         return lobbyService.kick(user.id(), lobbyId, request);
     }
 
     @DeleteMapping("/{lobbyId}")
-    public MessageResponse delete(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+    public DeleteLobbyResponse delete(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
         return lobbyService.delete(user.id(), lobbyId);
     }
 
@@ -99,7 +100,9 @@ public class LobbyController {
         long currentTotalAmount,
         long remainingAmount,
         long participantCount,
-        String orderStatus
+        String orderStatus,
+        Long lastReadMessageId,
+        long unreadCount
     ) {}
     public record LobbyResponse(
         Long lobbyId,
@@ -109,8 +112,11 @@ public class LobbyController {
         long minimumOrderAmount,
         long currentTotalAmount,
         long deliveryFee,
+        long participantCount,
         String orderStatus,
-        String cartLockedAt
+        String cartLockedAt,
+        Long lastReadMessageId,
+        long unreadCount
     ) {}
     public record LobbyMembershipResponse(
         Long lobbyId,
@@ -120,5 +126,16 @@ public class LobbyController {
         String joinedAt,
         String leftAt
     ) {}
+    public record LockCartResponse(Long lobbyId, String previousStatus, String orderStatus, String cartLockedAt) {}
+    public record LobbyStatusResponse(Long lobbyId, String previousStatus, String newStatus) {}
+    public record KickParticipantResponse(Long lobbyId, Long kickedUserId, String membershipStatus, Long kickedBy) {}
+    public record TransferHostResponse(
+        Long lobbyId,
+        Long previousHostUserId,
+        Long newHostUserId,
+        String previousHostMembershipStatus,
+        String newHostRole
+    ) {}
+    public record DeleteLobbyResponse(Long lobbyId, String previousStatus, String newStatus, String deletedAt) {}
     public record MessageResponse(String message) {}
 }

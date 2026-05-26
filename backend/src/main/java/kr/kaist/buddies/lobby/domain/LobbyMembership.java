@@ -43,6 +43,12 @@ public class LobbyMembership {
     @Column(name = "left_at")
     private Instant leftAt;
 
+    @Column(name = "last_read_message_id")
+    private Long lastReadMessageId;
+
+    @Column(name = "last_read_at")
+    private Instant lastReadAt;
+
     protected LobbyMembership() {
     }
 
@@ -82,6 +88,14 @@ public class LobbyMembership {
         return leftAt;
     }
 
+    public Long getLastReadMessageId() {
+        return lastReadMessageId;
+    }
+
+    public Instant getLastReadAt() {
+        return lastReadAt;
+    }
+
     public boolean isHost() {
         return roleInLobby == LobbyMemberRole.HOST;
     }
@@ -111,5 +125,15 @@ public class LobbyMembership {
 
     public void makeHost() {
         this.roleInLobby = LobbyMemberRole.HOST;
+    }
+
+    public void updateLastReadMessage(Long messageId, Instant readAt) {
+        if (messageId == null) {
+            return;
+        }
+        if (lastReadMessageId == null || messageId > lastReadMessageId) {
+            this.lastReadMessageId = messageId;
+            this.lastReadAt = readAt;
+        }
     }
 }
