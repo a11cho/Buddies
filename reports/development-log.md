@@ -415,3 +415,89 @@
 - 만료된 `revoked_tokens` row 정리 정책 추가
 - `/auth/refresh`가 access token 기반 임시 구현인지, refresh token 기반으로 확장할지 팀 결정
 - `1_비밀번호재설정.md` 기준으로 비밀번호 재설정 API 실제 서비스 로직 구현
+
+### 비밀번호 재설정 서버 로직 구현
+
+#### 목적
+
+`buddies-doc/SDD/1_비밀번호재설정.md`와 SRS `REQ-AUTH-6`에 맞춰 비밀번호 재설정 요청, 재설정 토큰 발급/메일 전송, 새 비밀번호 저장, 토큰 재사용 방지 로직을 백엔드 서버에 구현했다. 프론트엔드 화면은 이번 범위에서 제외하고 서버 API만 실제 서비스 로직으로 연결했다.
+
+#### 주요 변경 사항
+
+- 비밀번호 재설정 링크 요청 구현
+  - `POST /auth/password-reset/request`가 `AuthService.requestPasswordReset()`을 호출하도록 변경
+  - 이메일 입력값을 정규화하고 `@kaist.ac.kr` 도메인 여부를 검증
+  - 사용자가 존재하지 않아도 계정 존재 여부를 노출하지 않고 동일한 성공 응답 반환
+  - 사용자가 존재하면 secure random 기반 32-byte reset token 생성
+  - reset token 원문은 이메일 링크에만 포함하고 DB에는 `sha256Hex(token)`만 저장
+  - `expires_at`을 현재 시각 기준 30분 후로 설정
+  - 같은 사용자의 기존 미사용 reset token은 `used_at`을 기록해 무효화
+  - 비밀번호 재설정 링크를 이메일로 전송
+
+- 비밀번호 재설정 완료 구현
+  - `POST /auth/password-reset/confirm`이 `AuthService.confirmPasswordReset()`을 호출하도록 변경
+  - 요청 token을 SHA-256 hash로 변환해 `password_reset_tokens.token_hash` 조회
+  - token 없음, 만료, 이미 사용됨은 동일한 `400 Bad Request` 메시지로 처리
+  - 새 비밀번호와 확인값 일치 여부 검증
+  - 회원가입과 동일한 비밀번호 정책 검증
+  - 새 비밀번호를 `BCryptPasswordEncoder`로 해시화해 `users.password_hash` 갱신
+  - 비밀번호 갱신 성공 시 reset token의 `used_at`을 기록해 재사용 방지
+  - 비밀번호 갱신과 토큰 무효화를 하나의 transaction 안에서 처리
+
+- 메일 설정 보강
+  - `EmailOtpSender`에 비밀번호 재설정 링크 발송 메서드 추가
+  - `buddies.mail.password-reset-subject` 설정 추가
+  - `buddies.password-reset.url-template` 설정 추가
+  - `backend/config/mail-secrets.example.yml`에 비밀번호 재설정 메일 설정 예시 추가
+
+- 도메인 보강
+  - `PasswordResetTokenRepository`에 사용자별 미사용 reset token 조회 메서드 추가
+  - `User` Entity에 비밀번호 해시 갱신 메서드 추가
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthController.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthService.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/EmailOtpSender.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/domain/PasswordResetTokenRepository.java`
+- `backend/src/main/java/kr/kaist/buddies/user/domain/User.java`
+- `backend/src/main/resources/application.yml`
+- `backend/config/mail-secrets.example.yml`
+- `reports/development-log.md`
+
+#### SRS/SDD 충족 확인
+
+- SRS 기능 1-3 비밀번호 찾기
+  - KAIST 이메일을 통한 재설정 요청을 지원
+  - 고유한 시간 제한 reset token을 생성해 이메일 링크로 전송
+  - 새 비밀번호 제출 시 DB의 password hash를 갱신
+  - 재설정 완료 후 token을 무효화
+
+- `REQ-AUTH-6`
+  - reset token 만료 시간을 `now + 30분`으로 저장
+  - 만료된 token은 confirm 단계에서 거부
+
+- SDD 핵심 원칙
+  - 계정 존재 여부를 응답으로 노출하지 않음
+  - reset token 평문 미저장
+  - 사용 완료 token 재사용 방지
+  - 비밀번호 갱신과 token 무효화를 transaction으로 처리
+
+#### 검증
+
+- `rg`로 `requestPasswordReset`, `confirmPasswordReset`, `PASSWORD_RESET_TTL`, `sendPasswordResetLink`, `updatePasswordHash` 반영 위치를 확인했다.
+- `git diff`로 변경 범위와 SDD 요구사항 반영 내용을 확인했다.
+- 서버 테스트는 담당자가 직접 진행하기로 하여 이번 작업에서는 실행하지 않았다.
+- 현재 환경에는 `mvn` 명령과 Maven wrapper가 없어 Maven 빌드/테스트 검증은 수행하지 않았다.
+
+#### 남은 작업
+
+- 담당자 서버 테스트 수행
+- 비밀번호 재설정 end-to-end 테스트 추가
+  - 존재하는 KAIST 이메일로 reset link 발급
+  - 존재하지 않는 KAIST 이메일도 동일 응답 반환
+  - 만료 token 거부
+  - 이미 사용한 token 재사용 거부
+  - 재설정 후 새 비밀번호 로그인 성공 및 이전 비밀번호 로그인 실패
+- 운영 환경에 맞춰 `BUDDIES_PASSWORD_RESET_URL_TEMPLATE` 설정
+- reset token 요청 횟수 제한 정책이 필요하면 SDD와 구현에 추가

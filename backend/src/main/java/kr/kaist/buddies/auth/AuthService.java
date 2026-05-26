@@ -6,11 +6,14 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.HexFormat;
 import kr.kaist.buddies.auth.AuthController.LoginResponse;
 import kr.kaist.buddies.auth.AuthController.MeResponse;
 import kr.kaist.buddies.auth.domain.PendingSignup;
 import kr.kaist.buddies.auth.domain.PendingSignupRepository;
+import kr.kaist.buddies.auth.domain.PasswordResetToken;
+import kr.kaist.buddies.auth.domain.PasswordResetTokenRepository;
 import kr.kaist.buddies.auth.domain.RevokedToken;
 import kr.kaist.buddies.auth.domain.RevokedTokenRepository;
 import kr.kaist.buddies.user.domain.User;
@@ -25,13 +28,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
     private static final Duration OTP_TTL = Duration.ofMinutes(5);
     private static final Duration RESEND_COOLDOWN = Duration.ofSeconds(60);
+    private static final Duration PASSWORD_RESET_TTL = Duration.ofMinutes(30);
     private static final int MAX_OTP_ATTEMPTS = 3;
     private static final int MAX_PASSWORD_LENGTH = 72;
+    private static final int PASSWORD_RESET_TOKEN_BYTES = 32;
     private static final String NAME_PATTERN = "[A-Za-z0-9가-힣 ]+";
     private static final String PASSWORD_PATTERN = "[A-Za-z0-9!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?`~]+";
 
     private final UserRepository userRepository;
     private final PendingSignupRepository pendingSignupRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final EmailOtpSender emailOtpSender;
@@ -41,6 +47,7 @@ public class AuthService {
     public AuthService(
         UserRepository userRepository,
         PendingSignupRepository pendingSignupRepository,
+        PasswordResetTokenRepository passwordResetTokenRepository,
         PasswordEncoder passwordEncoder,
         JwtTokenProvider jwtTokenProvider,
         EmailOtpSender emailOtpSender,
@@ -48,6 +55,7 @@ public class AuthService {
     ) {
         this.userRepository = userRepository;
         this.pendingSignupRepository = pendingSignupRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.emailOtpSender = emailOtpSender;
@@ -170,6 +178,48 @@ public class AuthService {
         }
     }
 
+    @Transactional
+    public void requestPasswordReset(String email) {
+        String normalizedEmail = normalizeEmail(email);
+        if (!validKaistEmail(normalizedEmail)) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "이메일 형식이 올바르지 않습니다.");
+        }
+
+        User user = userRepository.findByEmail(normalizedEmail).orElse(null);
+        if (user == null) {
+            return;
+        }
+
+        Instant now = Instant.now();
+        passwordResetTokenRepository.findByUser_IdAndUsedAtIsNull(user.getId())
+            .forEach(token -> token.markUsed(now));
+
+        String resetToken = createPasswordResetToken();
+        passwordResetTokenRepository.save(new PasswordResetToken(user, sha256Hex(resetToken), now.plus(PASSWORD_RESET_TTL)));
+        emailOtpSender.sendPasswordResetLink(normalizedEmail, resetToken);
+    }
+
+    @Transactional
+    public void confirmPasswordReset(String token, String newPassword, String newPasswordConfirm) {
+        if (token == null || token.isBlank()) {
+            throw invalidPasswordResetToken();
+        }
+        if (newPassword == null || !newPassword.equals(newPasswordConfirm) || !validPassword(newPassword)) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "새 비밀번호가 비밀번호 규칙을 만족하지 않습니다.");
+        }
+
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByTokenHash(sha256Hex(token.trim()))
+            .orElseThrow(this::invalidPasswordResetToken);
+
+        Instant now = Instant.now();
+        if (resetToken.getUsedAt() != null || resetToken.getExpiresAt().isBefore(now)) {
+            throw invalidPasswordResetToken();
+        }
+
+        resetToken.getUser().updatePasswordHash(passwordEncoder.encode(newPassword));
+        resetToken.markUsed(now);
+    }
+
     private LoginResponse createLoginResponse(User user) {
         return new LoginResponse(jwtTokenProvider.createAccessToken(user.getId(), user.getRole()), "Bearer", jwtTokenProvider.expiresInSeconds());
     }
@@ -216,6 +266,12 @@ public class AuthService {
         return String.format("%06d", secureRandom.nextInt(1_000_000));
     }
 
+    private String createPasswordResetToken() {
+        byte[] bytes = new byte[PASSWORD_RESET_TOKEN_BYTES];
+        secureRandom.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
     private String sha256Hex(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -238,5 +294,9 @@ public class AuthService {
 
     private AuthException invalidCredentials() {
         return new AuthException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.");
+    }
+
+    private AuthException invalidPasswordResetToken() {
+        return new AuthException(HttpStatus.BAD_REQUEST, "비밀번호 재설정 링크가 올바르지 않거나 만료되었습니다.");
     }
 }

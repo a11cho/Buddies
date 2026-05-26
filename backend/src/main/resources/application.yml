@@ -31,3 +31,6 @@ buddies:
   mail:
     from: ${BUDDIES_MAIL_FROM:no-reply@buddies.local}
     signup-subject: ${BUDDIES_MAIL_SIGNUP_SUBJECT:Buddies 인증 코드}
+    password-reset-subject: ${BUDDIES_MAIL_PASSWORD_RESET_SUBJECT:Buddies 비밀번호 재설정}
+  password-reset:
+    url-template: ${BUDDIES_PASSWORD_RESET_URL_TEMPLATE:http://localhost:5173/password-reset?token=%s}

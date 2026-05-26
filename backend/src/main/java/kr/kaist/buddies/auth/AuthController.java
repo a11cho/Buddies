@@ -62,13 +62,14 @@ public class AuthController {
 
     @PostMapping("/password-reset/request")
     public MessageResponse requestPasswordReset(@Valid @RequestBody EmailRequest request) {
-        return new MessageResponse("Password reset requested for " + request.email());
+        authService.requestPasswordReset(request.email());
+        return new MessageResponse("입력한 이메일로 비밀번호 재설정 안내를 보냈습니다.");
     }
 
     @PostMapping("/password-reset/confirm")
     public MessageResponse confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
-        // The client network layer sends SHA-256 encoded reset token values.
-        return new MessageResponse("Password reset confirmed");
+        authService.confirmPasswordReset(request.token(), request.newPassword(), request.newPasswordConfirm());
+        return new MessageResponse("비밀번호가 재설정되었습니다. 새 비밀번호로 로그인해주세요.");
     }
 
     public record SignupRequest(@Email @NotBlank String email, @NotBlank String name, @NotBlank String password) {}
