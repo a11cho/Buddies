@@ -1,6 +1,7 @@
 package kr.kaist.buddies.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import kr.kaist.buddies.auth.JwtAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,11 +38,13 @@ public class SecurityConfig {
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint((request, response, exception) -> {
                     response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    response.setCharacterEncoding(StandardCharsets.UTF_8.name());
                     response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                     objectMapper.writeValue(response.getWriter(), Map.of("error", "토큰이 필요합니다."));
                 })
                 .accessDeniedHandler((request, response, exception) -> {
                     response.setStatus(HttpStatus.FORBIDDEN.value());
+                    response.setCharacterEncoding(StandardCharsets.UTF_8.name());
                     response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                     objectMapper.writeValue(response.getWriter(), Map.of("error", "접근 권한이 없습니다."));
                 })
