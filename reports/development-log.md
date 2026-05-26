@@ -548,3 +548,81 @@
 - 새 비밀번호 변경 성공 후 새 비밀번호 로그인 확인
 - SMTP timeout 값이 실제 로컬 메일 서버/KAIST SMTP 환경에 적절한지 조정
 - 추후 프론트엔드가 준비되면 `BUDDIES_PASSWORD_RESET_URL_TEMPLATE`을 실제 프론트 reset page URL로 전환
+
+### 프로필, 주문 이력, 평가 및 도움말 서버 로직 구현
+
+#### 목적
+
+`buddies-doc/SDD/2_프로필&이력&평가&도움말.md`에 맞춰 기존 placeholder 응답을 실제 JWT 사용자와 DB 기반 로직으로 연결했다. 이번 범위는 백엔드 서버 API 구현이며, 프론트엔드 화면 구현은 제외했다.
+
+#### 주요 변경 사항
+
+- 프로필 조회 및 수정 구현
+  - `GET /users/me`가 JWT principal의 userId로 `users` 테이블을 조회하도록 변경
+  - `PATCH /users/me`가 이름과 프로필 이미지 URL만 수정하도록 제한
+  - `email`, `id`, `role`, `trustScore`, `status` 변경 시도는 `403 Forbidden`으로 거부
+  - 이름은 회원가입 정책과 동일하게 영문, 한글, 숫자, 띄어쓰기만 허용하고 양 끝 공백을 거부
+  - `SUSPENDED`, `BANNED` 사용자는 주요 수정/등록 기능에서 제한
+
+- 주문 이력 조회 구현
+  - `GET /users/me/order-history`가 로그인 사용자의 lobby membership을 기준으로 닫힌 로비 이력을 조회
+  - `DELIVERED`, `CLOSED` 상태 로비를 이력 대상으로 사용
+  - 식당명, delivery location, Host 이름, 참여자 수, 총 결제 금액, 내 결제 금액, 평가 가능 여부를 반환
+  - 현재 DB 스키마에 영수증 이미지 URL 필드가 없어 `receiptImageUrl`은 `null`로 반환
+
+- 사용자 평가 구현
+  - `POST /ratings`가 JWT 사용자 ID를 rater로 사용하도록 변경
+  - 자기 자신 평가 금지
+  - 닫힌 로비에서만 평가 허용
+  - 평가자와 대상자가 같은 로비 멤버였는지 검증
+  - `(lobby_id, rater_user_id, target_user_id)` 중복 평가를 사전 조회 및 DB unique constraint로 방지
+  - 평가 저장 후 대상 사용자의 `trust_score`를 평균 평점 기준으로 재계산
+
+- FAQ 및 Direct Contact 구현
+  - `GET /help/faqs`가 OTP 만료, 딥링크 실패, 로비 참여 제한, 결제 지연, 신고 방법 FAQ를 반환
+  - `POST /support/tickets`가 JWT 사용자 ID로 지원 티켓을 생성
+  - 관련 `lobbyId`가 제공되면 로비 존재 여부를 검증
+
+- 서비스 계층 추가
+  - `UserService` 추가
+  - 기존 스키마에 이미 존재하는 `lobbies`, `lobby_memberships`, `payment_records`, `ratings`, `support_tickets`는 `JdbcTemplate`으로 조회/삽입
+  - `UserController`는 API 표면과 인증 사용자 추출만 담당하도록 정리
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/user/UserController.java`
+- `backend/src/main/java/kr/kaist/buddies/user/UserService.java`
+- `reports/development-log.md`
+
+#### SRS/SDD 충족 확인
+
+- `REQ-PROF-1`
+  - 사용자 요청으로 검증된 KAIST 이메일을 변경할 수 없도록 차단
+
+- `REQ-HIST-1`
+  - 주문 이력 API에 `receiptImageUrl` 필드를 유지
+  - 현재 DB에 영수증 이미지 저장 필드가 없어 사용 가능한 값이 없을 때 `null` 반환
+
+- `REQ-RATE-1`
+  - 같은 닫힌 로비의 멤버였던 사용자에게만 평가 허용
+
+- `REQ-RATE-2`
+  - 같은 lobbyId와 targetUserId 조합에 대해 rater당 1회만 평가 허용
+
+- `REQ-HELP-1`
+  - `POST /support/tickets`로 Admin 대시보드에서 처리 가능한 지원 티켓을 생성
+
+#### 검증
+
+- `rg`로 placeholder 응답 제거와 `UserService` 연결 위치를 확인했다.
+- `rg`로 평가 성공 메시지, 문의 등록 메시지, 불변 프로필 필드 거부 메시지 반영 위치를 확인했다.
+- 서버 테스트는 담당자가 직접 진행하기로 하여 이번 작업에서는 실행하지 않았다.
+- 현재 환경에는 `mvn` 명령과 Maven wrapper가 없어 Maven 빌드/테스트 검증은 수행하지 않았다.
+
+#### 남은 작업
+
+- 담당자 서버 테스트 수행
+- 주문 영수증 이미지 저장 필드/테이블이 확정되면 `receiptImageUrl` 연결
+- 주문 이력의 닫힌 로비 기준을 `DELIVERED`, `CLOSED` 중 어느 상태까지 포함할지 팀 최종 확인
+- 평가 가능 사용자 목록 API가 필요하면 별도 endpoint로 확장
+- Trust Score 계산식을 단순 평균에서 SRS 최종 정책으로 확장
