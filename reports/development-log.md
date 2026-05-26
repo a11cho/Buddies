@@ -501,3 +501,50 @@
   - 재설정 후 새 비밀번호 로그인 성공 및 이전 비밀번호 로그인 실패
 - 운영 환경에 맞춰 `BUDDIES_PASSWORD_RESET_URL_TEMPLATE` 설정
 - reset token 요청 횟수 제한 정책이 필요하면 SDD와 구현에 추가
+
+### 로컬 비밀번호 재설정 페이지 및 메일 timeout 보강
+
+#### 목적
+
+로컬 테스트 중 이메일 링크를 클릭했을 때 백엔드 서버에서 바로 비밀번호 변경 페이지를 확인할 수 있도록 단순 HTML 페이지를 추가했다. 또한 로컬 SMTP 연결 또는 전송이 지연될 때 서버 응답이 오래 대기하는 문제를 줄이기 위해 메일 timeout 기본값을 설정했다.
+
+#### 주요 변경 사항
+
+- 비밀번호 재설정 링크 대상 변경
+  - 기본 `BUDDIES_PASSWORD_RESET_URL_TEMPLATE` 값을 `http://localhost:8080/password-reset?token=%s`로 변경
+  - 이메일로 받은 reset link가 프론트 테스트 앱이 아니라 백엔드 서버의 `/password-reset` 페이지를 열도록 조정
+  - `backend/config/mail-secrets.example.yml`의 예시 URL도 같은 값으로 변경
+
+- 백엔드 비밀번호 변경 페이지 추가
+  - `GET /password-reset` endpoint 추가
+  - 쿼리 파라미터 `token` 값을 HTML form의 token input에 자동 채움
+  - 새 비밀번호와 새 비밀번호 확인을 입력하면 `/auth/password-reset/confirm`으로 JSON 요청 전송
+  - 꾸밈 없이 로컬 테스트용 최소 HTML/JavaScript만 포함
+  - 기존 API 보안 설정상 `GET /password-reset`은 public endpoint로 접근 가능
+
+- SMTP timeout 설정 추가
+  - `spring.mail.properties.mail.smtp.connectiontimeout` 기본값을 5000ms로 설정
+  - `spring.mail.properties.mail.smtp.timeout` 기본값을 5000ms로 설정
+  - `spring.mail.properties.mail.smtp.writetimeout` 기본값을 5000ms로 설정
+  - 환경변수 `BUDDIES_MAIL_CONNECTION_TIMEOUT_MS`, `BUDDIES_MAIL_TIMEOUT_MS`, `BUDDIES_MAIL_WRITE_TIMEOUT_MS`로 조정 가능
+  - `mail-secrets.example.yml`에도 동일한 timeout 예시 추가
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/auth/PasswordResetPageController.java`
+- `backend/src/main/resources/application.yml`
+- `backend/config/mail-secrets.example.yml`
+- `reports/development-log.md`
+
+#### 검증
+
+- `rg`로 `/password-reset`, `PasswordResetPageController`, `connectiontimeout`, `timeout`, `writetimeout`, `url-template` 반영 위치를 확인했다.
+- 백엔드 서버 실행 및 브라우저 테스트는 담당자가 로컬 환경에서 진행하기로 하여 이번 작업에서는 실행하지 않았다.
+- 현재 환경에는 `mvn` 명령과 Maven wrapper가 없어 Maven 빌드/테스트 검증은 수행하지 않았다.
+
+#### 남은 작업
+
+- 로컬 서버에서 이메일 링크 클릭 후 `/password-reset` 페이지 표시 확인
+- 새 비밀번호 변경 성공 후 새 비밀번호 로그인 확인
+- SMTP timeout 값이 실제 로컬 메일 서버/KAIST SMTP 환경에 적절한지 조정
+- 추후 프론트엔드가 준비되면 `BUDDIES_PASSWORD_RESET_URL_TEMPLATE`을 실제 프론트 reset page URL로 전환
