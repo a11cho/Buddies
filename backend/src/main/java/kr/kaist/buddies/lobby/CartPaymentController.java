@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/lobbies/{lobbyId}")
+@RequestMapping("/lobbies/{lobbyId}")
 public class CartPaymentController {
     @PostMapping("/cart-items")
     public CartItemResponse addItem(@PathVariable Long lobbyId, @Valid @RequestBody CartItemRequest request) {

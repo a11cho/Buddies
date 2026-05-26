@@ -1,15 +1,23 @@
 package kr.kaist.buddies.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
+import kr.kaist.buddies.auth.JwtAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -21,11 +29,23 @@ public class SecurityConfig {
     private String allowedOrigins;
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter, ObjectMapper objectMapper) throws Exception {
         return http
             .csrf(AbstractHttpConfigurer::disable)
             .cors(Customizer.withDefaults())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint((request, response, exception) -> {
+                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    objectMapper.writeValue(response.getWriter(), Map.of("error", "토큰이 필요합니다."));
+                })
+                .accessDeniedHandler((request, response, exception) -> {
+                    response.setStatus(HttpStatus.FORBIDDEN.value());
+                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    objectMapper.writeValue(response.getWriter(), Map.of("error", "접근 권한이 없습니다."));
+                })
+            )
             .headers(headers -> headers
                 .cacheControl(Customizer.withDefaults())
                 .contentTypeOptions(Customizer.withDefaults())
@@ -36,11 +56,20 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/ws/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/auth/signup/**", "/api/auth/login", "/api/auth/password-reset/**").permitAll()
-                // TODO: Add JWT authentication and RBAC guards for User, Lobby Member, Host, and Admin endpoints.
+                .requestMatchers(HttpMethod.POST, "/auth/signup/**", "/auth/login", "/auth/password-reset/**").permitAll()
+                .requestMatchers("/admin/**").hasRole("ADMIN")
+                .requestMatchers("/auth/me", "/auth/refresh", "/auth/logout").authenticated()
+                .requestMatchers("/users/me", "/users/me/**", "/ratings", "/help/faqs", "/support/tickets").authenticated()
+                .requestMatchers("/lobbies/**", "/reports").authenticated()
                 .anyRequest().permitAll()
             )
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     @Bean

@@ -190,7 +190,6 @@ CREATE TABLE admin_audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- TODO: Refresh-token/logout invalidation storage is still under discussion.
 CREATE UNIQUE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_status_created_at ON users(status, created_at);
 CREATE UNIQUE INDEX idx_pending_signups_email ON pending_signups(email);

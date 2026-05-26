@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/lobbies/{lobbyId}/chat")
+@RequestMapping("/lobbies/{lobbyId}/chat")
 public class ChatController {
     @GetMapping("/connection")
     public ChatConnectionResponse connection(@PathVariable Long lobbyId) {

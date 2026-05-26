@@ -24,6 +24,7 @@ mobile/coverage/
 .env
 .env.*
 !.env.example
+backend/config/mail-secrets.yml
 *.log
 .DS_Store
 Thumbs.db

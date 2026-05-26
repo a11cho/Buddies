@@ -1,6 +1,8 @@
 spring:
   application:
     name: buddies-backend
+  config:
+    import: optional:file:./config/mail-secrets.yml
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/buddies}
     username: ${SPRING_DATASOURCE_USERNAME:buddies}
@@ -11,6 +13,13 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  mail:
+    properties:
+      mail:
+        smtp:
+          connectiontimeout: ${BUDDIES_MAIL_CONNECTION_TIMEOUT_MS:5000}
+          timeout: ${BUDDIES_MAIL_TIMEOUT_MS:5000}
+          writetimeout: ${BUDDIES_MAIL_WRITE_TIMEOUT_MS:5000}
 
 server:
   port: 8080
@@ -25,6 +34,10 @@ buddies:
   jwt:
     secret: ${BUDDIES_JWT_SECRET:change-this-development-secret-change-this}
   cors:
-    allowed-origins:
-      - http://localhost:5173
-
+    allowed-origins: ${BUDDIES_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  mail:
+    from: ${BUDDIES_MAIL_FROM:no-reply@buddies.local}
+    signup-subject: ${BUDDIES_MAIL_SIGNUP_SUBJECT:Buddies 인증 코드}
+    password-reset-subject: ${BUDDIES_MAIL_PASSWORD_RESET_SUBJECT:Buddies 비밀번호 재설정}
+  password-reset:
+    url-template: ${BUDDIES_PASSWORD_RESET_URL_TEMPLATE:http://localhost:8080/password-reset?token=%s}

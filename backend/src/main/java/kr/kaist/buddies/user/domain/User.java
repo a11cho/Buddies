@@ -114,4 +114,9 @@ public class User {
         this.suspendedUntil = suspendedUntil;
         this.updatedAt = Instant.now();
     }
+
+    public void updatePasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.updatedAt = Instant.now();
+    }
 }
