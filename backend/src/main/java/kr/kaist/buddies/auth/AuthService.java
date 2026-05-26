@@ -11,6 +11,8 @@ import kr.kaist.buddies.auth.AuthController.LoginResponse;
 import kr.kaist.buddies.auth.AuthController.MeResponse;
 import kr.kaist.buddies.auth.domain.PendingSignup;
 import kr.kaist.buddies.auth.domain.PendingSignupRepository;
+import kr.kaist.buddies.auth.domain.RevokedToken;
+import kr.kaist.buddies.auth.domain.RevokedTokenRepository;
 import kr.kaist.buddies.user.domain.User;
 import kr.kaist.buddies.user.domain.UserRepository;
 import kr.kaist.buddies.user.domain.UserStatus;
@@ -33,6 +35,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final EmailOtpSender emailOtpSender;
+    private final RevokedTokenRepository revokedTokenRepository;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public AuthService(
@@ -40,13 +43,15 @@ public class AuthService {
         PendingSignupRepository pendingSignupRepository,
         PasswordEncoder passwordEncoder,
         JwtTokenProvider jwtTokenProvider,
-        EmailOtpSender emailOtpSender
+        EmailOtpSender emailOtpSender,
+        RevokedTokenRepository revokedTokenRepository
     ) {
         this.userRepository = userRepository;
         this.pendingSignupRepository = pendingSignupRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.emailOtpSender = emailOtpSender;
+        this.revokedTokenRepository = revokedTokenRepository;
     }
 
     @Transactional
@@ -156,6 +161,13 @@ public class AuthService {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "토큰이 올바르지 않습니다."));
         return createLoginResponse(user);
+    }
+
+    @Transactional
+    public void logout(AuthenticatedUser user) {
+        if (!revokedTokenRepository.existsByTokenId(user.tokenId())) {
+            revokedTokenRepository.save(new RevokedToken(user.tokenId(), user.expiresAt(), Instant.now()));
+        }
     }
 
     private LoginResponse createLoginResponse(User user) {

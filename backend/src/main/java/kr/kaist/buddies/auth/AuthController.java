@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/auth")
 public class AuthController {
     private final AuthService authService;
 
@@ -55,7 +55,8 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public MessageResponse logout() {
+    public MessageResponse logout(@CurrentUser AuthenticatedUser user) {
+        authService.logout(user);
         return new MessageResponse("로그아웃되었습니다.");
     }
 

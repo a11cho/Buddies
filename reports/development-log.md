@@ -346,3 +346,72 @@
 - 운영/테스트용 SMTP 계정 발급 및 `backend/config/mail-secrets.yml` 로컬 설정
 - refresh token 저장소 및 logout invalidation 정책 구현
 - 비밀번호 재설정 API 실제 서비스 로직 구현
+
+## 2026-05-26
+
+### API 경로 정합화 및 로그아웃 토큰 무효화 반영
+
+#### 목적
+
+`buddies-doc/SDD/7_API_목록_정리.md`의 최종 API 목록은 global version prefix 없이 endpoint를 표기한다. 이에 맞춰 백엔드 컨트롤러와 Spring Security matcher에서 기존 `/api` prefix를 제거했다. 또한 SRS `REQ-AUTH-7`에 대응하기 위해 로그아웃된 access token이 보호 API에서 재사용되지 않도록 JWT `jti` 기반 무효화 저장소를 추가했다.
+
+비밀번호 재설정은 `buddies-doc/SDD/1_비밀번호재설정.md`에서 별도 설계 및 구현 대상으로 관리한다.
+
+#### 주요 변경 사항
+
+- API 경로 정합화
+  - Auth API 경로를 `/api/auth/...`에서 `/auth/...`로 변경
+  - Lobby API 경로를 `/api/lobbies/...`에서 `/lobbies/...`로 변경
+  - Chat REST API 경로를 `/api/lobbies/{lobbyId}/chat/...`에서 `/lobbies/{lobbyId}/chat/...`로 변경
+  - Profile/Rating/Help/Support/Admin/Report API에서 전역 `/api` prefix 제거
+  - Spring Security `requestMatchers`도 SDD 최종 API 경로에 맞춰 갱신
+
+- 로그아웃 토큰 무효화 구현
+  - JWT payload에 `jti`를 추가해 access token 단위 식별자를 발급
+  - `AuthenticatedUser` principal에 `tokenId`, `expiresAt`을 포함하도록 확장
+  - `POST /auth/logout` 호출 시 현재 JWT의 `jti`와 만료 시각을 `revoked_tokens`에 저장
+  - `JwtAuthenticationFilter`에서 요청 JWT의 `jti`가 `revoked_tokens`에 존재하면 `401 Unauthorized`로 차단
+  - 중복 로그아웃 요청 시 같은 `token_id`를 중복 저장하지 않도록 repository 조회 후 저장
+
+- DB 마이그레이션 추가
+  - `V2__revoked_tokens.sql` 추가
+  - `revoked_tokens.token_id`에 unique index 추가
+  - 만료된 revoked token 정리 작업을 고려해 `expires_at` index 추가
+  - `V1__initial_schema.sql`에 남아 있던 refresh/logout invalidation TODO 주석 제거
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthController.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthService.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthenticatedUser.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/JwtAuthenticationFilter.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/JwtTokenProvider.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/domain/RevokedToken.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/domain/RevokedTokenRepository.java`
+- `backend/src/main/java/kr/kaist/buddies/config/SecurityConfig.java`
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminController.java`
+- `backend/src/main/java/kr/kaist/buddies/chat/ChatController.java`
+- `backend/src/main/java/kr/kaist/buddies/lobby/CartPaymentController.java`
+- `backend/src/main/java/kr/kaist/buddies/lobby/LobbyController.java`
+- `backend/src/main/java/kr/kaist/buddies/user/UserController.java`
+- `backend/src/main/resources/db/migration/V1__initial_schema.sql`
+- `backend/src/main/resources/db/migration/V2__revoked_tokens.sql`
+- `reports/development-log.md`
+
+#### 검증
+
+- `rg`로 백엔드 `src/main/java`, `src/main/resources` 내 `/api` prefix 흔적이 제거되었는지 확인했다.
+- `rg`로 `jti`, `revoked_tokens`, `RevokedTokenRepository`, `logout` 반영 위치를 확인했다.
+- `git status --short`로 변경 파일 범위를 확인했다.
+- 현재 환경에는 `mvn` 명령과 Maven wrapper가 없어 Maven 빌드/테스트 검증은 수행하지 못했다.
+
+#### 남은 작업
+
+- Maven wrapper 추가 또는 Maven 설치 후 백엔드 컴파일/테스트 실행
+- 로그아웃 무효화 end-to-end 테스트 추가
+  - 로그인 후 보호 API 접근 성공
+  - 로그아웃 성공
+  - 같은 access token으로 보호 API 접근 시 `401 Unauthorized`
+- 만료된 `revoked_tokens` row 정리 정책 추가
+- `/auth/refresh`가 access token 기반 임시 구현인지, refresh token 기반으로 확장할지 팀 결정
+- `1_비밀번호재설정.md` 기준으로 비밀번호 재설정 API 실제 서비스 로직 구현

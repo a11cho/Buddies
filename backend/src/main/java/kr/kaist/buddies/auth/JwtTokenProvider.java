@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
+import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import kr.kaist.buddies.user.domain.UserRole;
@@ -44,6 +45,7 @@ public class JwtTokenProvider {
             String payload = encodeJson(Map.of(
                 "sub", userId.toString(),
                 "role", role.name(),
+                "jti", UUID.randomUUID().toString(),
                 "iat", issuedAt,
                 "exp", expiresAt
             ));
@@ -73,7 +75,11 @@ public class JwtTokenProvider {
             }
             Long userId = Long.valueOf(String.valueOf(payload.get("sub")));
             UserRole role = UserRole.valueOf(String.valueOf(payload.get("role")));
-            return new AuthenticatedUser(userId, role);
+            String tokenId = String.valueOf(payload.get("jti"));
+            if (tokenId == null || tokenId.isBlank() || "null".equals(tokenId)) {
+                throw invalidToken();
+            }
+            return new AuthenticatedUser(userId, role, tokenId, Instant.ofEpochSecond(expiresAt));
         } catch (AuthException exception) {
             throw exception;
         } catch (Exception exception) {
