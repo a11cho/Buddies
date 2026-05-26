@@ -13,6 +13,13 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  mail:
+    properties:
+      mail:
+        smtp:
+          connectiontimeout: ${BUDDIES_MAIL_CONNECTION_TIMEOUT_MS:5000}
+          timeout: ${BUDDIES_MAIL_TIMEOUT_MS:5000}
+          writetimeout: ${BUDDIES_MAIL_WRITE_TIMEOUT_MS:5000}
 
 server:
   port: 8080
@@ -33,4 +40,4 @@ buddies:
     signup-subject: ${BUDDIES_MAIL_SIGNUP_SUBJECT:Buddies 인증 코드}
     password-reset-subject: ${BUDDIES_MAIL_PASSWORD_RESET_SUBJECT:Buddies 비밀번호 재설정}
   password-reset:
-    url-template: ${BUDDIES_PASSWORD_RESET_URL_TEMPLATE:http://localhost:5173/password-reset?token=%s}
+    url-template: ${BUDDIES_PASSWORD_RESET_URL_TEMPLATE:http://localhost:8080/password-reset?token=%s}
