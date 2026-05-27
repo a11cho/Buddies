@@ -38,6 +38,7 @@ public class LobbyService {
     private final CartService cartService;
     private final ChatReadService chatReadService;
     private final PaymentService paymentService;
+    private final LobbyEventPublisher lobbyEventPublisher;
 
     public LobbyService(
         LobbyRepository lobbyRepository,
@@ -45,7 +46,8 @@ public class LobbyService {
         UserRepository userRepository,
         CartService cartService,
         ChatReadService chatReadService,
-        PaymentService paymentService
+        PaymentService paymentService,
+        LobbyEventPublisher lobbyEventPublisher
     ) {
         this.lobbyRepository = lobbyRepository;
         this.lobbyMembershipRepository = lobbyMembershipRepository;
@@ -53,6 +55,7 @@ public class LobbyService {
         this.cartService = cartService;
         this.chatReadService = chatReadService;
         this.paymentService = paymentService;
+        this.lobbyEventPublisher = lobbyEventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -98,6 +101,7 @@ public class LobbyService {
         }
 
         LobbyMembership membership = lobbyMembershipRepository.save(new LobbyMembership(lobby, user, LobbyMemberRole.PARTICIPANT));
+        lobbyEventPublisher.memberJoined(lobbyId, userId, user.getName());
         return toMembershipResponse(membership);
     }
 
@@ -114,6 +118,7 @@ public class LobbyService {
 
         membership.leave(Instant.now());
         cartService.deleteActiveItemsOwnedBy(lobbyId, userId);
+        lobbyEventPublisher.memberLeft(lobbyId, userId, membership.getUser().getName());
         return toMembershipResponse(membership);
     }
 
@@ -131,6 +136,7 @@ public class LobbyService {
         String previousStatus = lobby.getOrderStatus().name();
         lobby.lockCart(Instant.now());
         paymentService.createOrRefreshForLockedLobby(lobby, userId);
+        lobbyEventPublisher.cartLocked(lobbyId);
         return new LockCartResponse(lobbyId, previousStatus, lobby.getOrderStatus().name(), lobby.getCartLockedAt().toString());
     }
 
@@ -146,6 +152,7 @@ public class LobbyService {
 
         String previousStatus = lobby.getOrderStatus().name();
         lobby.changeStatus(nextStatus, Instant.now());
+        lobbyEventPublisher.statusUpdated(lobbyId, LobbyOrderStatus.valueOf(previousStatus), nextStatus);
         return new LobbyStatusResponse(lobbyId, previousStatus, nextStatus.name());
     }
 
@@ -168,6 +175,7 @@ public class LobbyService {
         newHost.makeHost();
         lobby.transferHost(newHost.getUser(), now);
         cartService.deleteActiveItemsOwnedBy(lobbyId, userId);
+        lobbyEventPublisher.hostTransferred(lobbyId, request.newHostUserId(), newHost.getUser().getName());
         return new TransferHostResponse(
             lobbyId,
             userId,
@@ -200,6 +208,7 @@ public class LobbyService {
         } else if (lobby.getOrderStatus() == LobbyOrderStatus.LOCKED) {
             paymentService.deactivateUserAndRefreshLockedLobby(lobby, request.targetUserId());
         }
+        lobbyEventPublisher.memberKicked(lobbyId, request.targetUserId(), target.getUser().getName());
         return new KickParticipantResponse(lobbyId, request.targetUserId(), target.getStatus().name(), userId);
     }
 
@@ -218,6 +227,7 @@ public class LobbyService {
         }
 
         lobby.changeStatus(nextStatus, Instant.now());
+        lobbyEventPublisher.lobbyClosed(lobbyId, nextStatus);
         return new DeleteLobbyResponse(lobbyId, previousStatus, nextStatus.name(), lobby.getDeletedAt().toString());
     }
 

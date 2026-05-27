@@ -25,17 +25,20 @@ public class CartService {
     private final LobbyRepository lobbyRepository;
     private final LobbyMembershipRepository lobbyMembershipRepository;
     private final UserRepository userRepository;
+    private final LobbyEventPublisher lobbyEventPublisher;
 
     public CartService(
         CartItemRepository cartItemRepository,
         LobbyRepository lobbyRepository,
         LobbyMembershipRepository lobbyMembershipRepository,
-        UserRepository userRepository
+        UserRepository userRepository,
+        LobbyEventPublisher lobbyEventPublisher
     ) {
         this.cartItemRepository = cartItemRepository;
         this.lobbyRepository = lobbyRepository;
         this.lobbyMembershipRepository = lobbyMembershipRepository;
         this.userRepository = userRepository;
+        this.lobbyEventPublisher = lobbyEventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -61,6 +64,7 @@ public class CartService {
             request.quantity()
         ));
         long currentTotalAmount = refreshLobbyTotal(lobby);
+        lobbyEventPublisher.cartItemAdded(lobbyId, userId, owner.getName(), item.getItemName());
         return toResponse(item, currentTotalAmount);
     }
 
@@ -74,6 +78,7 @@ public class CartService {
 
         item.update(request.itemName().trim(), request.unitPrice(), request.quantity(), Instant.now());
         long currentTotalAmount = refreshLobbyTotal(lobby);
+        lobbyEventPublisher.cartItemUpdated(lobbyId, userId, item.getOwner().getName(), item.getItemName());
         return toResponse(item, currentTotalAmount);
     }
 
@@ -86,8 +91,10 @@ public class CartService {
         requireOwner(item, userId);
 
         Instant deletedAt = Instant.now();
+        String itemName = item.getItemName();
         item.delete(deletedAt);
         long currentTotalAmount = refreshLobbyTotal(lobby);
+        lobbyEventPublisher.cartItemDeleted(lobbyId, userId, item.getOwner().getName(), itemName);
         return new DeleteCartItemResponse(itemId, lobbyId, deletedAt.toString(), currentTotalAmount);
     }
 

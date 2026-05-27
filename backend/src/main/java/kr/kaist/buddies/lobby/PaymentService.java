@@ -28,19 +28,22 @@ public class PaymentService {
     private final LobbyMembershipRepository lobbyMembershipRepository;
     private final CartItemRepository cartItemRepository;
     private final UserRepository userRepository;
+    private final LobbyEventPublisher lobbyEventPublisher;
 
     public PaymentService(
         PaymentRecordRepository paymentRecordRepository,
         LobbyRepository lobbyRepository,
         LobbyMembershipRepository lobbyMembershipRepository,
         CartItemRepository cartItemRepository,
-        UserRepository userRepository
+        UserRepository userRepository,
+        LobbyEventPublisher lobbyEventPublisher
     ) {
         this.paymentRecordRepository = paymentRecordRepository;
         this.lobbyRepository = lobbyRepository;
         this.lobbyMembershipRepository = lobbyMembershipRepository;
         this.cartItemRepository = cartItemRepository;
         this.userRepository = userRepository;
+        this.lobbyEventPublisher = lobbyEventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -65,6 +68,7 @@ public class PaymentService {
         }
 
         paymentRecord.markPaid(host, Instant.now());
+        lobbyEventPublisher.paymentRecordUpdated(lobbyId, paymentRecord.getUser().getId(), paymentRecord.getUser().getName());
         return toResponse(paymentRecord);
     }
 
