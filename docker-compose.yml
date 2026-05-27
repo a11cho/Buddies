@@ -34,8 +34,7 @@ services:
       SERVER_SSL_KEY_STORE_PASSWORD: buddies-local-ssl
       BUDDIES_PASSWORD_RESET_URL_TEMPLATE: https://localhost:8443/password-reset?token=%s
     volumes:
-      - ./backend/config/mail-secrets.yml:/app/config/mail-secrets.yml:ro
-      - ./backend/config/dev-ssl.p12:/app/config/dev-ssl.p12:ro
+      - ./backend/config:/app/config:ro
     ports:
       - "8443:8443"
 
