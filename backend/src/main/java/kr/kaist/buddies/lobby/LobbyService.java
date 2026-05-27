@@ -3,6 +3,7 @@ package kr.kaist.buddies.lobby;
 import java.time.Instant;
 import java.util.List;
 import kr.kaist.buddies.auth.AuthException;
+import kr.kaist.buddies.chat.ChatArchiveService;
 import kr.kaist.buddies.chat.ChatReadService;
 import kr.kaist.buddies.lobby.LobbyController.CreateLobbyRequest;
 import kr.kaist.buddies.lobby.LobbyController.DeleteLobbyResponse;
@@ -39,6 +40,7 @@ public class LobbyService {
     private final ChatReadService chatReadService;
     private final PaymentService paymentService;
     private final LobbyEventPublisher lobbyEventPublisher;
+    private final ChatArchiveService chatArchiveService;
 
     public LobbyService(
         LobbyRepository lobbyRepository,
@@ -47,7 +49,8 @@ public class LobbyService {
         CartService cartService,
         ChatReadService chatReadService,
         PaymentService paymentService,
-        LobbyEventPublisher lobbyEventPublisher
+        LobbyEventPublisher lobbyEventPublisher,
+        ChatArchiveService chatArchiveService
     ) {
         this.lobbyRepository = lobbyRepository;
         this.lobbyMembershipRepository = lobbyMembershipRepository;
@@ -56,6 +59,7 @@ public class LobbyService {
         this.chatReadService = chatReadService;
         this.paymentService = paymentService;
         this.lobbyEventPublisher = lobbyEventPublisher;
+        this.chatArchiveService = chatArchiveService;
     }
 
     @Transactional(readOnly = true)
@@ -228,6 +232,7 @@ public class LobbyService {
 
         lobby.changeStatus(nextStatus, Instant.now());
         lobbyEventPublisher.lobbyClosed(lobbyId, nextStatus);
+        chatArchiveService.archiveLobby(lobbyId);
         return new DeleteLobbyResponse(lobbyId, previousStatus, nextStatus.name(), lobby.getDeletedAt().toString());
     }
 
