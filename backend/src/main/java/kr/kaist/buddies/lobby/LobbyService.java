@@ -198,7 +198,7 @@ public class LobbyService {
         if (lobby.getOrderStatus() == LobbyOrderStatus.WAITING) {
             cartService.deleteActiveItemsOwnedBy(lobbyId, request.targetUserId());
         } else if (lobby.getOrderStatus() == LobbyOrderStatus.LOCKED) {
-            paymentService.markInactiveForUser(lobbyId, request.targetUserId());
+            paymentService.deactivateUserAndRefreshLockedLobby(lobby, request.targetUserId());
         }
         return new KickParticipantResponse(lobbyId, request.targetUserId(), target.getStatus().name(), userId);
     }

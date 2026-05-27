@@ -72,6 +72,28 @@ public class PaymentService {
     public void createOrRefreshForLockedLobby(Lobby lobby, Long hostUserId) {
         User host = userRepository.findById(hostUserId)
             .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "토큰이 올바르지 않습니다."));
+        refreshActiveMemberRecords(lobby, host);
+    }
+
+    @Transactional
+    public void deactivateUserAndRefreshLockedLobby(Lobby lobby, Long userId) {
+        markInactiveForUser(lobby.getId(), userId);
+        refreshActiveMemberRecords(lobby, lobby.getHost());
+    }
+
+    @Transactional
+    public void markInactiveForUser(Long lobbyId, Long userId) {
+        paymentRecordRepository.findByLobby_IdAndUser_Id(lobbyId, userId)
+            .ifPresent(paymentRecord -> paymentRecord.markInactive(Instant.now()));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean allPayableRecordsPaid(Long lobbyId) {
+        return paymentRecordRepository.existsByLobby_Id(lobbyId)
+            && paymentRecordRepository.allActiveRecordsPaid(lobbyId);
+    }
+
+    private void refreshActiveMemberRecords(Lobby lobby, User host) {
         List<LobbyMembership> activeMembers = lobbyMembershipRepository.findByLobby_IdAndStatus(lobby.getId(), LobbyMembershipStatus.ACTIVE);
         if (activeMembers.isEmpty()) {
             throw new AuthException(HttpStatus.CONFLICT, "정산할 로비 멤버가 없습니다.");
@@ -91,18 +113,6 @@ public class PaymentService {
                 paymentRecord.markPaid(host, Instant.now());
             }
         }
-    }
-
-    @Transactional
-    public void markInactiveForUser(Long lobbyId, Long userId) {
-        paymentRecordRepository.findByLobby_IdAndUser_Id(lobbyId, userId)
-            .ifPresent(paymentRecord -> paymentRecord.markInactive(Instant.now()));
-    }
-
-    @Transactional(readOnly = true)
-    public boolean allPayableRecordsPaid(Long lobbyId) {
-        return paymentRecordRepository.existsByLobby_Id(lobbyId)
-            && paymentRecordRepository.allActiveRecordsPaid(lobbyId);
     }
 
     private Lobby findLobby(Long lobbyId) {
