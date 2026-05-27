@@ -7,6 +7,58 @@ export type SystemOverview = {
   recentLobbies: RecentLobby[];
 };
 
+export type ReportPage = {
+  items: ReportSummary[];
+  page: number;
+  size: number;
+  totalCount: number;
+};
+
+export type ReportSummary = {
+  reportId: number;
+  lobbyId: number;
+  reporterUserId: number;
+  reportedUserId: number;
+  reason: string;
+  status: string;
+  createdAt: string;
+};
+
+export type ReportDetail = {
+  reportId: number;
+  lobbyId: number;
+  reporter: UserReference;
+  reportedUser: UserReference;
+  reportedMessageId: number | null;
+  reason: string;
+  description: string | null;
+  status: string;
+  resolutionNote: string | null;
+  createdAt: string;
+};
+
+export type UserReference = {
+  id: number;
+  name: string;
+};
+
+export type ChatArchive = {
+  lobbyId: number;
+  messages: ArchiveMessage[];
+};
+
+export type ArchiveMessage = {
+  messageId: number;
+  lobbyId: number;
+  senderUserId: number | null;
+  senderName: string | null;
+  messageType: string;
+  content: string | null;
+  mediaUrl: string | null;
+  reported: boolean;
+  createdAt: string;
+};
+
 export type RecentLobby = {
   lobbyId: number;
   restaurantName: string;
@@ -33,6 +85,29 @@ export class ApiClient {
 
   async getSystemOverview(options: RequestOptions = {}): Promise<SystemOverview> {
     return this.request<SystemOverview>('/admin/system/overview', options);
+  }
+
+  async getReports(status = 'OPEN', page = 1, size = 20, options: RequestOptions = {}): Promise<ReportPage> {
+    return this.request<ReportPage>('/admin/reports', {
+      ...options,
+      query: { status, page, size },
+    });
+  }
+
+  async getReport(reportId: number, options: RequestOptions = {}): Promise<ReportDetail> {
+    return this.request<ReportDetail>(`/admin/reports/${reportId}`, options);
+  }
+
+  async resolveReport(reportId: number, resolutionNote: string, options: RequestOptions = {}): Promise<MessageResponse> {
+    return this.request<MessageResponse>(`/admin/reports/${reportId}/resolve`, {
+      ...options,
+      method: 'PATCH',
+      body: { resolutionNote },
+    });
+  }
+
+  async getChatArchive(lobbyId: number, options: RequestOptions = {}): Promise<ChatArchive> {
+    return this.request<ChatArchive>(`/admin/lobbies/${lobbyId}/chat-archive`, options);
   }
 
   async login(email: string, password: string): Promise<LoginResponse> {

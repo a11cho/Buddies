@@ -4,82 +4,137 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
+import kr.kaist.buddies.auth.AuthenticatedUser;
+import kr.kaist.buddies.auth.CurrentUser;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping
 public class AdminController {
+    private final AdminService adminService;
+
+    public AdminController(AdminService adminService) {
+        this.adminService = adminService;
+    }
+
     @PostMapping("/reports")
-    public MessageResponse createReport(@Valid @RequestBody CreateReportRequest request) {
-        // TODO: Use reporter user id from JWT, not from client input.
-        return new MessageResponse("Report created for user " + request.reportedUserId());
+    @ResponseStatus(HttpStatus.CREATED)
+    public MessageResponse createReport(@CurrentUser AuthenticatedUser currentUser, @Valid @RequestBody CreateReportRequest request) {
+        adminService.createReport(currentUser, request);
+        return new MessageResponse("Report has been submitted.");
     }
 
     @GetMapping("/admin/reports")
-    public List<ReportResponse> reports() {
-        return List.of();
+    public ReportPageResponse reports(
+        @RequestParam(required = false) String status,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "20") int size
+    ) {
+        return adminService.listReports(status, page, size);
     }
 
     @GetMapping("/admin/reports/{reportId}")
-    public ReportResponse report(@PathVariable Long reportId) {
-        return new ReportResponse(reportId, 1L, 2L, "OPEN");
+    public ReportDetailResponse report(@CurrentUser AuthenticatedUser admin, @PathVariable Long reportId) {
+        return adminService.getReport(admin, reportId);
     }
 
     @PatchMapping("/admin/reports/{reportId}/resolve")
-    public MessageResponse resolveReport(@PathVariable Long reportId, @Valid @RequestBody ResolveReportRequest request) {
-        return new MessageResponse("Report " + reportId + " resolved");
+    public MessageResponse resolveReport(
+        @CurrentUser AuthenticatedUser admin,
+        @PathVariable Long reportId,
+        @Valid @RequestBody ResolveReportRequest request
+    ) {
+        adminService.resolveReport(admin, reportId, request.resolutionNote());
+        return new MessageResponse("Report has been resolved.");
     }
 
     @GetMapping("/admin/lobbies/{lobbyId}")
-    public AdminLobbyResponse adminLobby(@PathVariable Long lobbyId) {
-        return new AdminLobbyResponse(lobbyId, "Sample Restaurant", "WAITING");
+    public AdminLobbyResponse adminLobby(@CurrentUser AuthenticatedUser admin, @PathVariable Long lobbyId) {
+        return adminService.adminLobby(admin, lobbyId);
     }
 
     @GetMapping("/admin/lobbies/{lobbyId}/chat-archive")
-    public List<ArchiveMessageResponse> chatArchive(@PathVariable Long lobbyId) {
-        return List.of();
+    public ChatArchiveResponse chatArchive(@CurrentUser AuthenticatedUser admin, @PathVariable Long lobbyId) {
+        return adminService.chatArchive(admin, lobbyId);
     }
 
     @GetMapping("/admin/lobbies/{lobbyId}/payment-records")
-    public List<AdminPaymentRecordResponse> adminPaymentRecords(@PathVariable Long lobbyId) {
-        return List.of();
+    public List<AdminPaymentRecordResponse> adminPaymentRecords(@CurrentUser AuthenticatedUser admin, @PathVariable Long lobbyId) {
+        return adminService.paymentRecords(admin, lobbyId);
     }
 
     @GetMapping("/admin/users")
-    public List<AdminUserResponse> users() {
-        return List.of();
+    public List<AdminUserResponse> users(
+        @RequestParam(required = false) String status,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "20") int size
+    ) {
+        return adminService.users(status, page, size);
     }
 
     @GetMapping("/admin/users/{userId}")
-    public AdminUserResponse user(@PathVariable Long userId) {
-        return new AdminUserResponse(userId, "dev@kaist.ac.kr", "ACTIVE", 0.0);
+    public AdminUserResponse user(@CurrentUser AuthenticatedUser admin, @PathVariable Long userId) {
+        return adminService.user(admin, userId);
     }
 
     @PostMapping("/admin/users/{userId}/moderation-actions")
-    public MessageResponse moderateUser(@PathVariable Long userId, @Valid @RequestBody ModerationActionRequest request) {
-        // TODO: Reject self-moderation and write admin_audit_logs in the service transaction.
-        return new MessageResponse("Moderation action " + request.actionType() + " applied to user " + userId);
+    @ResponseStatus(HttpStatus.CREATED)
+    public MessageResponse moderateUser(
+        @CurrentUser AuthenticatedUser admin,
+        @PathVariable Long userId,
+        @Valid @RequestBody ModerationActionRequest request
+    ) {
+        adminService.moderateUser(admin, userId, request);
+        return new MessageResponse("Moderation action has been applied.");
     }
 
     @GetMapping("/admin/system/overview")
     public SystemOverviewResponse overview() {
-        return new SystemOverviewResponse(0, 0, 0, 0, 0, List.of());
+        return adminService.overview();
     }
 
     public record CreateReportRequest(@NotNull Long lobbyId, @NotNull Long reportedUserId, Long reportedMessageId, @NotBlank String reason, String description) {}
     public record ResolveReportRequest(String resolutionNote) {}
     public record ModerationActionRequest(@NotBlank String actionType, @NotBlank String reason, String endsAt, Long reportId) {}
-    public record ReportResponse(Long id, Long reporterUserId, Long reportedUserId, String status) {}
-    public record ArchiveMessageResponse(Long id, Long senderUserId, String body, String createdAt) {}
-    public record AdminUserResponse(Long id, String email, String status, double trustScore) {}
-    public record AdminLobbyResponse(Long lobbyId, String restaurantName, String orderStatus) {}
-    public record AdminPaymentRecordResponse(Long id, Long userId, long amount, String status) {}
+    public record UserReference(Long id, String name) {}
+    public record ReportSummaryResponse(Long reportId, Long lobbyId, Long reporterUserId, Long reportedUserId, String reason, String status, String createdAt) {}
+    public record ReportPageResponse(List<ReportSummaryResponse> items, int page, int size, long totalCount) {}
+    public record ReportDetailResponse(
+        Long reportId,
+        Long lobbyId,
+        UserReference reporter,
+        UserReference reportedUser,
+        Long reportedMessageId,
+        String reason,
+        String description,
+        String status,
+        String resolutionNote,
+        String createdAt
+    ) {}
+    public record ChatArchiveResponse(Long lobbyId, List<ArchiveMessageResponse> messages) {}
+    public record ArchiveMessageResponse(
+        Long messageId,
+        Long lobbyId,
+        Long senderUserId,
+        String senderName,
+        String messageType,
+        String content,
+        String mediaUrl,
+        boolean reported,
+        String createdAt
+    ) {}
+    public record AdminUserResponse(Long id, String email, String name, String status, double trustScore) {}
+    public record AdminLobbyResponse(Long lobbyId, String restaurantName, String deliveryLocation, Long hostUserId, long currentTotal, String orderStatus, boolean cartLocked) {}
+    public record AdminPaymentRecordResponse(Long id, Long userId, String userName, long amount, String status, String confirmedAt) {}
     public record SystemOverviewResponse(
         long activeLobbyCount,
         long cartLockedLobbyCount,

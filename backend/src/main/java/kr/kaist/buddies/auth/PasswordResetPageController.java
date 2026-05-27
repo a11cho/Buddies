@@ -1,5 +1,6 @@
 package kr.kaist.buddies.auth;
 
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,7 +10,10 @@ import org.springframework.web.bind.annotation.ResponseBody;
 public class PasswordResetPageController {
     @GetMapping(value = "/password-reset", produces = MediaType.TEXT_HTML_VALUE)
     @ResponseBody
-    public String passwordResetPage() {
+    public String passwordResetPage(HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Referrer-Policy", "no-referrer");
         return """
             <!doctype html>
             <html lang="ko">

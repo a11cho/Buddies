@@ -511,7 +511,7 @@
 #### 주요 변경 사항
 
 - 비밀번호 재설정 링크 대상 변경
-  - 기본 `BUDDIES_PASSWORD_RESET_URL_TEMPLATE` 값을 `http://localhost:8080/password-reset?token=%s`로 변경
+  - 기본 `BUDDIES_PASSWORD_RESET_URL_TEMPLATE` 값을 `https://localhost:8443/password-reset?token=%s`로 변경
   - 이메일로 받은 reset link가 프론트 테스트 앱이 아니라 백엔드 서버의 `/password-reset` 페이지를 열도록 조정
   - `backend/config/mail-secrets.example.yml`의 예시 URL도 같은 값으로 변경
 
@@ -548,6 +548,67 @@
 - 새 비밀번호 변경 성공 후 새 비밀번호 로그인 확인
 - SMTP timeout 값이 실제 로컬 메일 서버/KAIST SMTP 환경에 적절한지 조정
 - 추후 프론트엔드가 준비되면 `BUDDIES_PASSWORD_RESET_URL_TEMPLATE`을 실제 프론트 reset page URL로 전환
+
+### 비밀번호 재설정 HTTPS 연결 및 테스트 도구 포트 갱신
+
+#### 목적
+
+비밀번호 재설정 링크와 서버 간 통신이 평문 HTTP가 아니라 HTTPS로 이루어지도록 로컬 개발 서버의 SSL 설정을 추가했다. 서버 포트가 `8080`에서 HTTPS `8443`으로 변경되었으므로, `buddies-doc/tools/signup-test-app`의 테스트 프록시도 새 서버 주소를 바라보도록 갱신했다.
+
+#### 주요 변경 사항
+
+- 백엔드 HTTPS 기본 설정
+  - Spring Boot server port 기본값을 `8443`으로 변경
+  - `server.ssl.enabled=true` 기본 설정 추가
+  - 로컬 개발용 PKCS12 keystore `backend/config/dev-ssl.p12` 생성
+  - `server.ssl.key-store`, `key-store-type`, `key-store-password`, `key-alias` 설정 추가
+  - Dockerfile `EXPOSE` 포트를 `8443`으로 변경
+  - Docker Compose backend port mapping을 `8443:8443`으로 변경
+  - Docker Compose에서 `dev-ssl.p12`를 컨테이너 `/app/config/dev-ssl.p12`로 mount
+
+- 비밀번호 재설정 링크 HTTPS 전환
+  - 기본 `BUDDIES_PASSWORD_RESET_URL_TEMPLATE`을 `https://localhost:8443/password-reset?token=%s`로 변경
+  - `backend/config/mail-secrets.example.yml`의 reset URL 예시도 HTTPS 8443 기준으로 변경
+  - 비밀번호 재설정 페이지 응답에 `Cache-Control: no-store`, `Pragma: no-cache`, `Referrer-Policy: no-referrer` 헤더 추가
+
+- 테스트 도구 갱신
+  - `buddies-doc/tools/signup-test-app/server.js`의 backend proxy target을 `https://127.0.0.1:8443`으로 변경
+  - self-signed 개발 인증서를 사용하는 로컬 HTTPS 백엔드에 연결할 수 있도록 test proxy에서 `rejectUnauthorized: false` 적용
+  - `BUDDIES_TEST_BACKEND` 환경변수로 테스트 백엔드 URL을 바꿀 수 있게 변경
+  - 테스트 페이지 상단에 기본 proxy 대상이 HTTPS 8443임을 표시
+
+- 문서 및 보안 처리
+  - `backend/README.md`에 로컬 HTTPS 기본 URL과 self-signed 인증서 경고 추가
+  - `keytool` 기반 `dev-ssl.p12` 재생성 명령 추가
+  - `backend/config/dev-ssl.p12`를 `.gitignore`에 추가해 개발용 keystore가 커밋되지 않도록 처리
+
+#### 수정 파일
+
+- `.gitignore`
+- `backend/Dockerfile`
+- `backend/README.md`
+- `backend/config/mail-secrets.example.yml`
+- `backend/src/main/resources/application.yml`
+- `backend/src/main/java/kr/kaist/buddies/auth/PasswordResetPageController.java`
+- `docker-compose.yml`
+- `buddies-doc/tools/signup-test-app/server.js`
+- `buddies-doc/tools/signup-test-app/index.html`
+- `reports/development-log.md`
+
+#### 검증
+
+- `keytool`로 로컬 개발용 `backend/config/dev-ssl.p12` 생성
+- `node --check buddies-doc/tools/signup-test-app/server.js` 성공
+- `rg`로 `8443`, `ssl`, `dev-ssl`, `password-reset`, `rejectUnauthorized`, `Referrer-Policy`, `no-store` 반영 위치 확인
+- 백엔드 서버 실행 및 브라우저 HTTPS 접속 테스트는 담당자가 로컬 환경에서 진행하기로 하여 이번 작업에서는 실행하지 않았다.
+- 현재 환경에는 `mvn` 명령과 Maven wrapper가 없어 Maven 빌드/테스트 검증은 수행하지 않았다.
+
+#### 남은 작업
+
+- 로컬 브라우저에서 `https://localhost:8443/password-reset?token=...` 접속 확인
+- self-signed 인증서 경고를 허용한 뒤 비밀번호 변경 요청이 정상 처리되는지 확인
+- 운영 환경에서는 개발용 `dev-ssl.p12` 대신 실제 인증서 또는 배포 환경 TLS termination 적용
+- 모바일/웹 클라이언트의 API base URL도 HTTPS 8443 또는 운영 HTTPS URL로 맞춰 테스트
 
 ### 프로필, 주문 이력, 평가 및 도움말 서버 로직 구현
 
@@ -626,3 +687,121 @@
 - 주문 이력의 닫힌 로비 기준을 `DELIVERED`, `CLOSED` 중 어느 상태까지 포함할지 팀 최종 확인
 - 평가 가능 사용자 목록 API가 필요하면 별도 endpoint로 확장
 - Trust Score 계산식을 단순 평균에서 SRS 최종 정책으로 확장
+
+## 2026-05-27
+
+### 관리자 신고 관리 및 채팅 아카이브 검토 기능 구현
+
+#### 목적
+
+`buddies-doc/SDD/5_관리자_신고&채팅검토.md`에 정의된 관리자 신고 검토 기능을 실제 백엔드 서비스와 관리자 웹 화면에 연결했다. API 경로와 응답 구조는 `buddies-doc/SDD/7_API_목록_정리.md`의 최종 API 목록을 따르고, DB 접근은 `buddies-doc/SDD/8_DB_목록_정리.md`의 `reports`, `chat_messages`, `chat_archives`, `admin_audit_logs`, `moderation_actions` 테이블 구조를 기준으로 구현했다.
+
+#### 주요 변경 사항
+
+- 신고 생성 API 구현
+  - `POST /reports`가 placeholder 응답 대신 `AdminService.createReport()`를 호출하도록 변경
+  - `reporterUserId`는 request body에서 받지 않고 JWT principal의 현재 사용자 ID를 사용
+  - 신고자와 피신고자가 같은 lobby의 active member인지 검증
+  - `reportedMessageId`가 제공된 경우 해당 메시지가 같은 `lobbyId`에 속하는지 검증
+  - 검증 통과 시 `reports` 테이블에 `OPEN` 상태 신고 저장
+  - 성공 응답은 SDD 기준에 맞춰 `201 Created`와 message 객체를 반환
+
+- 관리자 신고 목록 및 상세 조회 구현
+  - `GET /admin/reports?status=OPEN&page=1&size=20` 구현
+  - 응답을 SDD의 `{ items, page, size, totalCount }` 형태로 정리
+  - `OPEN`, `IN_REVIEW`, `RESOLVED` 상태 필터와 pagination 적용
+  - `GET /admin/reports/{reportId}` 구현
+  - reporter/reportedUser의 id, name과 신고 사유, 설명, 신고 메시지 ID, 상태를 반환
+  - 신고 상세 조회 시 `admin_audit_logs`에 `VIEW_REPORT` 기록
+
+- 신고 해결 처리 구현
+  - `PATCH /admin/reports/{reportId}/resolve` 구현
+  - `reports.status`를 `RESOLVED`로 변경
+  - `resolution_note`, `resolved_by_admin_id`, `resolved_at` 기록
+  - 해결 처리 시 `admin_audit_logs`에 `RESOLVE_REPORT` 기록
+
+- 관리자 채팅 아카이브 조회 구현
+  - `GET /admin/lobbies/{lobbyId}/chat-archive` 구현
+  - `chat_messages`와 `users`를 결합해 message id, sender user id, sender name, message type, content, media URL, createdAt 반환
+  - 같은 lobby의 신고된 `reported_message_id` 목록을 조회해 각 메시지에 `reported: true` 표시
+  - 채팅 아카이브 조회 시 `admin_audit_logs`에 `VIEW_CHAT_ARCHIVE` 기록
+
+- 관리자 보조 조회 기능 연결
+  - `GET /admin/system/overview`를 실제 DB count와 최근 lobby 목록 기반으로 구현
+  - `GET /admin/users`, `GET /admin/users/{userId}`를 실제 users 테이블 기반으로 구현
+  - 사용자 상세 조회 시 `VIEW_USER_DETAIL` 감사 로그 기록
+  - `POST /admin/users/{userId}/moderation-actions`에서 self-moderation 방지, 사용자 status 갱신, `moderation_actions` 및 `admin_audit_logs` 기록
+  - `GET /admin/lobbies/{lobbyId}`, `GET /admin/lobbies/{lobbyId}/payment-records`를 실제 DB 조회 기반으로 연결
+
+- Repository 및 서비스 계층 정리
+  - `AdminService` 신규 추가
+  - 기존 `AdminController`의 placeholder 로직을 service 호출로 대체
+  - `ReportRepository`에 pagination 및 reporter/reportedUser fetch를 위한 `EntityGraph` query 추가
+
+- Admin Web 구현
+  - 관리자 access token 입력 및 localStorage 저장 기능 추가
+  - overview 화면을 실제 `/admin/system/overview` 응답에 연결
+  - 신고 목록 화면 추가
+  - 신고 상태 필터 `OPEN`, `IN_REVIEW`, `RESOLVED` 추가
+  - 신고 상세 화면 추가
+  - 신고 상세에서 관련 lobby의 chat archive를 함께 조회
+  - 신고된 메시지는 별도 스타일로 강조 표시
+  - lobby id 직접 입력으로 chat archive를 조회할 수 있는 화면 추가
+  - `ApiClient`에 `getReports`, `getReport`, `resolveReport`, `getChatArchive` 추가
+  - Vite dev proxy에서 `/api` prefix를 백엔드의 non-versioned API 경로로 rewrite하도록 수정
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminController.java`
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminService.java`
+- `backend/src/main/java/kr/kaist/buddies/admin/domain/ReportRepository.java`
+- `admin-web/src/apiClient.ts`
+- `admin-web/src/main.tsx`
+- `admin-web/src/styles.css`
+- `admin-web/vite.config.ts`
+- `reports/development-log.md`
+
+#### SRS/SDD 충족 확인
+
+- `REQ-ADMIN-1`
+  - Admin이 제출된 신고 목록을 조회할 수 있도록 `GET /admin/reports` 구현
+
+- `REQ-ADMIN-2`
+  - 신고 목록 및 상세 응답에 신고자, 피신고자, 사유, lobby ID 포함
+
+- `REQ-ADMIN-3`
+  - Admin 전용 chat archive endpoint 구현
+  - Spring Security의 `/admin/**` ADMIN role matcher 위에서 동작
+
+- `REQ-ADMIN-4`
+  - chat archive 응답에서 신고된 메시지를 `reported: true`로 표시
+  - admin-web에서 reported message를 강조 표시
+
+- `REQ-ADMIN-5`
+  - archive message 응답에 user ID, timestamp, content, media URL 포함
+
+- `REQ-CHAT-7`
+  - archive 조회는 `/admin/lobbies/{lobbyId}/chat-archive` 경로로만 제공
+  - 일반 사용자 chat messages API와 분리
+
+#### 검증
+
+- 사용자가 테스트를 직접 수행하기로 하여 이번 작업에서는 backend/frontend 테스트를 실행하지 않았다.
+- 작업 중 `mvn test`는 로컬 환경에 `mvn` 명령이 없어 실행할 수 없음을 확인했다.
+- 작업 중 `npm run build`는 PowerShell 실행 정책과 미설치 dependency 문제로 실행되지 않았고, dependency 설치 승인 요청은 사용자가 거절했다.
+- 불완전하게 생성된 `admin-web/node_modules`와 `admin-web/.npm-cache`는 작업 부산물이므로 정리했다.
+- `git status --short`로 변경 파일 범위를 확인했다.
+- `rg`로 기존 관리자 placeholder DTO 이름과 TODO 흔적이 남아 있지 않은지 확인했다.
+
+#### 남은 작업
+
+- 사용자가 로컬 환경에서 backend test/build 실행
+- 사용자가 로컬 환경에서 admin-web dependency 설치 후 TypeScript/Vite build 실행
+- 실제 ADMIN 계정 JWT로 관리자 화면 end-to-end 확인
+- 신고 생성 테스트 데이터 구성
+  - 같은 lobby active member 간 신고 성공
+  - lobby에 속하지 않은 사용자 신고 거절
+  - 다른 lobby의 reportedMessageId 신고 거절
+- chat archive에서 reported message 강조 표시 확인
+  - `reported: true` 메시지 스타일 확인
+  - `sender_user_id = null`인 SYSTEM message 표시 확인
