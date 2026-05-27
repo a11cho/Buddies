@@ -12,7 +12,8 @@ import kr.kaist.buddies.auth.CurrentUser;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
+import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -67,13 +68,12 @@ public class ChatController {
     }
 
     @MessageMapping("/lobbies/{lobbyId}/chat/send")
-    @SendTo("/topic/lobbies/{lobbyId}/chat")
-    public ChatMessageResponse send(
+    public void send(
         Principal principal,
         @DestinationVariable Long lobbyId,
         @Valid ChatMessageRequest request
     ) {
-        return chatService.send(stompUser(principal).id(), lobbyId, request);
+        chatService.send(stompUser(principal).id(), lobbyId, request);
     }
 
     public record ChatConnectionResponse(String serverUrl, long expiresIn) {}
@@ -94,6 +94,12 @@ public class ChatController {
         String mediaUrl,
         String createdAt
     ) {}
+
+    @MessageExceptionHandler(Exception.class)
+    @SendToUser("/queue/chat-errors")
+    public ChatErrorResponse handleChatException(Exception exception) {
+        return ChatErrorMapper.toResponse(exception);
+    }
 
     private AuthenticatedUser stompUser(Principal principal) {
         if (principal instanceof Authentication authentication && authentication.getPrincipal() instanceof AuthenticatedUser user) {

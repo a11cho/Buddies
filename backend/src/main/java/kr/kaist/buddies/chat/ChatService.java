@@ -96,7 +96,9 @@ public class ChatService {
             mediaUrl,
             Instant.now()
         ));
-        return toResponse(message);
+        ChatMessageResponse response = toResponse(message);
+        eventPublisher.publishEvent(new ChatMessagePublishedEvent(lobbyId, response));
+        return response;
     }
 
     @Transactional
