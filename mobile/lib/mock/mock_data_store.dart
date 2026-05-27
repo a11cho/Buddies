@@ -1,0 +1,49 @@
+import '../models/chat_message.dart';
+import '../models/lobby.dart';
+import '../models/user.dart';
+import 'mock_data.dart';
+
+// 여러 mock service가 같은 앱 상태를 공유하도록 하는 in-memory 저장소입니다.
+class MockDataStore {
+  MockDataStore({
+    User currentUser = mockCurrentUser,
+    List<Lobby>? initialLobbies,
+    Map<int, List<ChatMessage>>? initialMessagesByLobbyId,
+  })  : currentUser = currentUser,
+        lobbies = List<Lobby>.from(initialLobbies ?? createInitialMockLobbies()),
+        messagesByLobbyId = (initialMessagesByLobbyId ??
+                createInitialMockMessages())
+            .map((key, value) => MapEntry(key, List<ChatMessage>.from(value)));
+
+  final User currentUser;
+  final List<Lobby> lobbies;
+  final Map<int, List<ChatMessage>> messagesByLobbyId;
+
+  int nextLobbyId = 100;
+  int nextCartItemId = 1000;
+  int nextPaymentRecordId = 2000;
+  int nextMessageId = 3000;
+
+  Lobby findLobby(int lobbyId) {
+    return lobbies.firstWhere(
+      (lobby) => lobby.lobbyId == lobbyId,
+      orElse: () => throw StateError('Lobby not found: $lobbyId'),
+    );
+  }
+
+  void replaceLobby(Lobby updatedLobby) {
+    final index = lobbies.indexWhere(
+      (lobby) => lobby.lobbyId == updatedLobby.lobbyId,
+    );
+    if (index == -1) {
+      throw StateError('Lobby not found: ${updatedLobby.lobbyId}');
+    }
+    lobbies[index] = updatedLobby;
+  }
+
+  List<ChatMessage> findMessages(int lobbyId) {
+    return messagesByLobbyId.putIfAbsent(lobbyId, () => []);
+  }
+}
+
+final mockDataStore = MockDataStore();

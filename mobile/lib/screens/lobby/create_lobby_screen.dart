@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/service_registry.dart';
+import '../../services/lobby_service.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/text_input_field.dart';
@@ -20,6 +22,7 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen> {
   final TextEditingController _minimumOrderAmountController =
       TextEditingController();
   final TextEditingController _deliveryFeeController = TextEditingController();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -67,12 +70,62 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen> {
           PrimaryButton(
             label: 'Create Lobby',
             icon: Icons.add,
-            onPressed: () {
-              Navigator.pop(context);
-            },
+            isLoading: _isSubmitting,
+            onPressed: _submit,
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _submit() async {
+    final minimumOrderAmount = int.tryParse(
+      _minimumOrderAmountController.text.trim(),
+    );
+    final deliveryFee = int.tryParse(_deliveryFeeController.text.trim());
+
+    if (_restaurantNameController.text.trim().isEmpty ||
+        _deliveryZoneController.text.trim().isEmpty ||
+        minimumOrderAmount == null ||
+        minimumOrderAmount < 0 ||
+        deliveryFee == null ||
+        deliveryFee < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please check the form values.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await AppServices.lobbyService.createLobby(
+        CreateLobbyRequest(
+          restaurantName: _restaurantNameController.text.trim(),
+          deliveryZone: _deliveryZoneController.text.trim(),
+          minimumOrderAmount: minimumOrderAmount,
+          deliveryFee: deliveryFee,
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 }

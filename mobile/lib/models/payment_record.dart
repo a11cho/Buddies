@@ -23,6 +23,26 @@ class PaymentRecord {
 
   bool get isPaid => status == PaymentStatus.paid;
 
+  PaymentRecord copyWith({
+    int? paymentRecordId,
+    int? lobbyId,
+    int? userId,
+    int? amount,
+    String? status,
+    int? confirmedByHostId,
+    DateTime? confirmedAt,
+  }) {
+    return PaymentRecord(
+      paymentRecordId: paymentRecordId ?? this.paymentRecordId,
+      lobbyId: lobbyId ?? this.lobbyId,
+      userId: userId ?? this.userId,
+      amount: amount ?? this.amount,
+      status: status ?? this.status,
+      confirmedByHostId: confirmedByHostId ?? this.confirmedByHostId,
+      confirmedAt: confirmedAt ?? this.confirmedAt,
+    );
+  }
+
   factory PaymentRecord.fromJson(Map<String, dynamic> json) {
     return PaymentRecord(
       paymentRecordId:

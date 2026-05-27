@@ -56,6 +56,48 @@ class Lobby {
       paymentRecords.isNotEmpty &&
       paymentRecords.every((record) => record.isPaid);
 
+  Lobby copyWith({
+    int? lobbyId,
+    int? hostUserId,
+    String? hostName,
+    double? hostTrustScore,
+    String? restaurantName,
+    String? deliveryZone,
+    int? minimumOrderAmount,
+    int? currentTotalAmount,
+    int? remainingAmount,
+    int? deliveryFee,
+    int? participantCount,
+    String? orderStatus,
+    DateTime? cartLockedAt,
+    int? lastReadMessageId,
+    int? unreadCount,
+    List<LobbyMember>? members,
+    List<CartItem>? cartItems,
+    List<PaymentRecord>? paymentRecords,
+  }) {
+    return Lobby(
+      lobbyId: lobbyId ?? this.lobbyId,
+      hostUserId: hostUserId ?? this.hostUserId,
+      hostName: hostName ?? this.hostName,
+      hostTrustScore: hostTrustScore ?? this.hostTrustScore,
+      restaurantName: restaurantName ?? this.restaurantName,
+      deliveryZone: deliveryZone ?? this.deliveryZone,
+      minimumOrderAmount: minimumOrderAmount ?? this.minimumOrderAmount,
+      currentTotalAmount: currentTotalAmount ?? this.currentTotalAmount,
+      remainingAmount: remainingAmount ?? this.remainingAmount,
+      deliveryFee: deliveryFee ?? this.deliveryFee,
+      participantCount: participantCount ?? this.participantCount,
+      orderStatus: orderStatus ?? this.orderStatus,
+      cartLockedAt: cartLockedAt ?? this.cartLockedAt,
+      lastReadMessageId: lastReadMessageId ?? this.lastReadMessageId,
+      unreadCount: unreadCount ?? this.unreadCount,
+      members: members ?? this.members,
+      cartItems: cartItems ?? this.cartItems,
+      paymentRecords: paymentRecords ?? this.paymentRecords,
+    );
+  }
+
   factory Lobby.fromJson(Map<String, dynamic> json) {
     final currentTotalAmount =
         parseJsonInt(json['currentTotalAmount'] ?? 0, 'currentTotalAmount');

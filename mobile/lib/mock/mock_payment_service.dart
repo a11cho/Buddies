@@ -1,0 +1,59 @@
+import '../core/enums.dart';
+import '../services/payment_service.dart';
+import 'mock_data_store.dart';
+
+class MockPaymentService implements PaymentService {
+  MockPaymentService({MockDataStore? store}) : _store = store ?? mockDataStore;
+
+  final MockDataStore _store;
+
+  @override
+  Future<ConfirmPaymentResult> confirmPaymentRecord(
+    int lobbyId,
+    int paymentRecordId,
+  ) async {
+    final lobby = _store.findLobby(lobbyId);
+    if (lobby.orderStatus != LobbyStatus.locked) {
+      throw StateError('Payment records can only be confirmed in LOCKED state.');
+    }
+    if (lobby.hostUserId != _store.currentUser.id) {
+      throw StateError('Only the Host can confirm payment records.');
+    }
+
+    final confirmedAt = DateTime.now();
+    final targetRecord = lobby.paymentRecords.firstWhere(
+      (record) => record.paymentRecordId == paymentRecordId,
+      orElse: () => throw StateError('PaymentRecord not found: $paymentRecordId'),
+    );
+    if (targetRecord.isPaid) {
+      throw StateError('PaymentRecord is already PAID.');
+    }
+    final previousStatus = targetRecord.status;
+
+    final updatedRecords = lobby.paymentRecords.map((record) {
+      if (record.paymentRecordId != paymentRecordId) {
+        return record;
+      }
+      return record.copyWith(
+        status: PaymentStatus.paid,
+        confirmedByHostId: lobby.hostUserId,
+        confirmedAt: confirmedAt,
+      );
+    }).toList();
+
+    final allPaymentsPaid = updatedRecords.every((record) => record.isPaid);
+    _store.replaceLobby(lobby.copyWith(paymentRecords: updatedRecords));
+
+    return ConfirmPaymentResult(
+      paymentRecordId: targetRecord.paymentRecordId,
+      lobbyId: lobbyId,
+      userId: targetRecord.userId,
+      amount: targetRecord.amount,
+      previousStatus: previousStatus,
+      status: PaymentStatus.paid,
+      confirmedByHostId: lobby.hostUserId,
+      confirmedAt: confirmedAt,
+      allPaymentsPaid: allPaymentsPaid,
+    );
+  }
+}

@@ -27,6 +27,28 @@ class LobbyMember {
 
   bool get isActive => membershipStatus == MembershipStatus.active;
 
+  LobbyMember copyWith({
+    int? userId,
+    String? name,
+    String? roleInLobby,
+    String? membershipStatus,
+    DateTime? joinedAt,
+    DateTime? leftAt,
+    int? lastReadMessageId,
+    DateTime? lastReadAt,
+  }) {
+    return LobbyMember(
+      userId: userId ?? this.userId,
+      name: name ?? this.name,
+      roleInLobby: roleInLobby ?? this.roleInLobby,
+      membershipStatus: membershipStatus ?? this.membershipStatus,
+      joinedAt: joinedAt ?? this.joinedAt,
+      leftAt: leftAt ?? this.leftAt,
+      lastReadMessageId: lastReadMessageId ?? this.lastReadMessageId,
+      lastReadAt: lastReadAt ?? this.lastReadAt,
+    );
+  }
+
   factory LobbyMember.fromJson(Map<String, dynamic> json) {
     return LobbyMember(
       userId: parseJsonInt(json['userId'], 'userId'),

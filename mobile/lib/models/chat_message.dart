@@ -32,6 +32,30 @@ class ChatMessage {
 
   bool isSentBy(int userId) => senderUserId == userId;
 
+  ChatMessage copyWith({
+    int? id,
+    int? lobbyId,
+    int? senderUserId,
+    String? messageType,
+    String? content,
+    String? mediaUrl,
+    DateTime? createdAt,
+    String? eventType,
+    int? targetUserId,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      lobbyId: lobbyId ?? this.lobbyId,
+      senderUserId: senderUserId ?? this.senderUserId,
+      messageType: messageType ?? this.messageType,
+      content: content ?? this.content,
+      mediaUrl: mediaUrl ?? this.mediaUrl,
+      createdAt: createdAt ?? this.createdAt,
+      eventType: eventType ?? this.eventType,
+      targetUserId: targetUserId ?? this.targetUserId,
+    );
+  }
+
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
       id: parseJsonInt(json['id'], 'id'),

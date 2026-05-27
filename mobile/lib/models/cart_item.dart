@@ -23,6 +23,26 @@ class CartItem {
 
   bool isOwnedBy(int userId) => ownerUserId == userId;
 
+  CartItem copyWith({
+    int? cartItemId,
+    int? lobbyId,
+    int? ownerUserId,
+    String? itemName,
+    int? unitPrice,
+    int? quantity,
+    int? subtotal,
+  }) {
+    return CartItem(
+      cartItemId: cartItemId ?? this.cartItemId,
+      lobbyId: lobbyId ?? this.lobbyId,
+      ownerUserId: ownerUserId ?? this.ownerUserId,
+      itemName: itemName ?? this.itemName,
+      unitPrice: unitPrice ?? this.unitPrice,
+      quantity: quantity ?? this.quantity,
+      subtotal: subtotal ?? this.subtotal,
+    );
+  }
+
   factory CartItem.fromJson(Map<String, dynamic> json) {
     final unitPrice = parseJsonInt(json['unitPrice'], 'unitPrice');
     final quantity = parseJsonInt(json['quantity'], 'quantity');
