@@ -30,7 +30,7 @@ services:
       BUDDIES_JWT_SECRET: change-this-development-secret-change-this
       SERVER_PORT: 8443
       SERVER_SSL_ENABLED: "true"
-      SERVER_SSL_KEY_STORE: /app/config/dev-ssl.p12
+      SERVER_SSL_KEY_STORE: /app/ssl/dev-ssl.p12
       SERVER_SSL_KEY_STORE_PASSWORD: buddies-local-ssl
       BUDDIES_PASSWORD_RESET_URL_TEMPLATE: https://localhost:8443/password-reset?token=%s
     volumes:

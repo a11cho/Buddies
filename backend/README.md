@@ -10,15 +10,15 @@ From `development/`:
 docker compose up --build
 ```
 
-The backend container runs HTTPS on `https://localhost:8443`. Before starting Docker Compose, make sure `backend/config/dev-ssl.p12` exists as a file. If Docker was started before the keystore existed, it may have created `backend/config/dev-ssl.p12` as a directory; remove that directory and generate the keystore again.
+The backend container runs HTTPS on `https://localhost:8443`. The Docker image generates a development self-signed keystore at `/app/ssl/dev-ssl.p12` during image build, so Docker Compose does not need to mount `backend/config/dev-ssl.p12`.
 
-PowerShell, using Docker's Java image:
+For local non-Docker runs, generate `backend/config/dev-ssl.p12` first. PowerShell, using Docker's Java image:
 
 ```powershell
 .\backend\scripts\generate-dev-ssl.ps1
 ```
 
-Manual generation, if `keytool` is installed locally:
+Manual local generation, if `keytool` is installed locally:
 
 ```bash
 keytool -genkeypair -alias buddies-local -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore backend/config/dev-ssl.p12 -storepass buddies-local-ssl -keypass buddies-local-ssl -validity 3650 -dname "CN=localhost, OU=Development, O=Buddies, L=Daejeon, ST=Daejeon, C=KR" -ext "SAN=dns:localhost,ip:127.0.0.1"
