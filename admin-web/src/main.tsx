@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import {
   ApiClient,
   ApiError,
+  type AdminUserDetail,
+  type AdminUserPage,
+  type AdminUserSummary,
   type ChatArchive,
   type CurrentUser,
   type ReportDetail,
@@ -15,7 +18,7 @@ import './styles.css';
 const apiClient = new ApiClient();
 const tokenStorageKey = 'buddies.admin.accessToken';
 
-type View = 'overview' | 'reports' | 'archive';
+type View = 'overview' | 'reports' | 'users' | 'archive';
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(tokenStorageKey) ?? '');
@@ -24,6 +27,9 @@ function App() {
   const [overview, setOverview] = useState<SystemOverview | null>(null);
   const [reports, setReports] = useState<ReportPage | null>(null);
   const [selectedReport, setSelectedReport] = useState<ReportDetail | null>(null);
+  const [users, setUsers] = useState<AdminUserPage | null>(null);
+  const [selectedUser, setSelectedUser] = useState<AdminUserDetail | null>(null);
+  const [userStatus, setUserStatus] = useState('ACTIVE');
   const [archive, setArchive] = useState<ChatArchive | null>(null);
   const [status, setStatus] = useState('OPEN');
   const [archiveLobbyId, setArchiveLobbyId] = useState('');
@@ -50,6 +56,7 @@ function App() {
       setLoginMessage('');
       await loadOverview(nextToken);
       await loadReports(status, nextToken);
+      await loadUsers(userStatus, nextToken);
     } catch (error) {
       clearSession();
       setLoginMessage(errorMessage(error));
@@ -70,6 +77,7 @@ function App() {
       setToken(response.accessToken);
       await loadOverview(response.accessToken);
       await loadReports(status, response.accessToken);
+      await loadUsers(userStatus, response.accessToken);
     } catch (error) {
       clearSession();
       setLoginMessage(errorMessage(error));
@@ -85,6 +93,8 @@ function App() {
     setOverview(null);
     setReports(null);
     setSelectedReport(null);
+    setUsers(null);
+    setSelectedUser(null);
     setArchive(null);
   }
 
@@ -116,6 +126,42 @@ function App() {
       const detail = await apiClient.getReport(report.reportId, { token: nextToken });
       setSelectedReport(detail);
       setArchive(await apiClient.getChatArchive(detail.lobbyId, { token: nextToken }));
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  async function loadUsers(nextStatus = userStatus, nextToken = token) {
+    try {
+      const page = await apiClient.getUsers(nextStatus, 1, 20, { token: nextToken });
+      setUsers(page);
+      if (page.items.length > 0) {
+        await selectUser(page.items[0], nextToken);
+      } else {
+        setSelectedUser(null);
+      }
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  async function selectUser(user: AdminUserSummary, nextToken = token) {
+    try {
+      setSelectedUser(await apiClient.getUser(user.id, { token: nextToken }));
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  async function moderateSelectedUser(actionType: string, reason: string, endsAt: string | null, reportId: number | null) {
+    if (!selectedUser) {
+      return;
+    }
+    try {
+      await apiClient.moderateUser(selectedUser.id, actionType, reason, endsAt, reportId, authOptions);
+      setMessage(`${actionType} action applied to ${selectedUser.name}.`);
+      await loadUsers(userStatus);
+      await loadOverview();
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -160,6 +206,7 @@ function App() {
         <nav>
           <button className={view === 'overview' ? 'active' : ''} onClick={() => setView('overview')}>Overview</button>
           <button className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>Reports</button>
+          <button className={view === 'users' ? 'active' : ''} onClick={() => setView('users')}>Users</button>
           <button className={view === 'archive' ? 'active' : ''} onClick={() => setView('archive')}>Chat Archive</button>
         </nav>
       </aside>
@@ -191,6 +238,19 @@ function App() {
             }}
             onSelect={selectReport}
             onResolve={resolveSelectedReport}
+          />
+        )}
+        {view === 'users' && (
+          <Users
+            users={users}
+            selectedUser={selectedUser}
+            status={userStatus}
+            onStatusChange={(nextStatus) => {
+              setUserStatus(nextStatus);
+              loadUsers(nextStatus);
+            }}
+            onSelect={selectUser}
+            onModerate={moderateSelectedUser}
           />
         )}
         {view === 'archive' && (
@@ -361,6 +421,154 @@ function Reports(props: {
   );
 }
 
+function Users(props: {
+  users: AdminUserPage | null;
+  selectedUser: AdminUserDetail | null;
+  status: string;
+  onStatusChange: (status: string) => void;
+  onSelect: (user: AdminUserSummary) => void;
+  onModerate: (actionType: string, reason: string, endsAt: string | null, reportId: number | null) => void;
+}) {
+  const [actionType, setActionType] = useState('WARNING');
+  const [reason, setReason] = useState('');
+  const [endsAt, setEndsAt] = useState('');
+  const [reportId, setReportId] = useState('');
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    props.onModerate(
+      actionType,
+      reason.trim(),
+      actionType === 'SUSPEND' && endsAt ? new Date(endsAt).toISOString() : null,
+      reportId ? Number(reportId) : null,
+    );
+    setReason('');
+    setEndsAt('');
+    setReportId('');
+  }
+
+  return (
+    <div className="review-grid users-grid">
+      <section className="panel">
+        <div className="panel-head">
+          <h3>Users</h3>
+          <select value={props.status} onChange={(event) => props.onStatusChange(event.target.value)}>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="SUSPENDED">SUSPENDED</option>
+            <option value="BANNED">BANNED</option>
+          </select>
+        </div>
+        <div className="report-list">
+          {(props.users?.items ?? []).map((user) => (
+            <button
+              key={user.id}
+              className={props.selectedUser?.id === user.id ? 'report-row selected' : 'report-row'}
+              onClick={() => props.onSelect(user)}
+            >
+              <strong>{user.name}</strong>
+              <span>{user.email}</span>
+              <span>{user.status} · Trust {user.trustScore.toFixed(2)}</span>
+              <small>User {user.id} · {user.role}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="panel detail">
+        {props.selectedUser ? (
+          <>
+            <div className="panel-head">
+              <h3>{props.selectedUser.name}</h3>
+              <span className="status">{props.selectedUser.status}</span>
+            </div>
+            <div className="metrics compact">
+              <Metric label="Reported" value={props.selectedUser.reportedCount} />
+              <Metric label="Reporter" value={props.selectedUser.reporterCount} />
+              <Metric label="Closed Lobbies" value={props.selectedUser.closedLobbyCount} />
+              <Metric label="Trust Score" value={props.selectedUser.trustScore} />
+            </div>
+            <dl>
+              <dt>Email</dt>
+              <dd>{props.selectedUser.email}</dd>
+              <dt>Role</dt>
+              <dd>{props.selectedUser.role}</dd>
+              <dt>Created</dt>
+              <dd>{formatDate(props.selectedUser.createdAt)}</dd>
+            </dl>
+            <form className="moderation-form" onSubmit={submit}>
+              <div className="panel-head">
+                <h3>Moderation Action</h3>
+              </div>
+              <div className="form-grid">
+                <label>
+                  Action
+                  <select value={actionType} onChange={(event) => setActionType(event.target.value)}>
+                    <option value="WARNING">WARNING</option>
+                    <option value="SUSPEND">SUSPEND</option>
+                    <option value="BAN">BAN</option>
+                    <option value="UNSUSPEND">UNSUSPEND</option>
+                  </select>
+                </label>
+                <label>
+                  Related Report
+                  <input
+                    min="1"
+                    placeholder="Optional"
+                    type="number"
+                    value={reportId}
+                    onChange={(event) => setReportId(event.target.value)}
+                  />
+                </label>
+                {actionType === 'SUSPEND' && (
+                  <label>
+                    Ends At
+                    <input
+                      type="datetime-local"
+                      value={endsAt}
+                      onChange={(event) => setEndsAt(event.target.value)}
+                    />
+                  </label>
+                )}
+              </div>
+              <label>
+                Reason
+                <textarea
+                  required
+                  placeholder="Describe why this action is being applied."
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                />
+              </label>
+              <button className="primary" disabled={!reason.trim() || (actionType === 'SUSPEND' && !endsAt)}>
+                Apply Action
+              </button>
+            </form>
+            <section className="history-block">
+              <h3>Moderation History</h3>
+              <div className="messages">
+                {props.selectedUser.moderationActions.length === 0 && <p className="empty">No moderation actions.</p>}
+                {props.selectedUser.moderationActions.map((action) => (
+                  <article key={action.id} className="message">
+                    <div>
+                      <strong>{action.actionType}</strong>
+                      <span>{action.adminName}</span>
+                      <small>{formatDate(action.createdAt)}</small>
+                    </div>
+                    <p>{action.reason}</p>
+                    {action.reportId && <small>Report #{action.reportId}</small>}
+                    {action.endsAt && <small>Ends {formatDate(action.endsAt)}</small>}
+                  </article>
+                ))}
+              </div>
+            </section>
+          </>
+        ) : (
+          <p className="empty">No users in this filter.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function ArchiveSearch(props: {
   lobbyId: string;
   archive: ChatArchive | null;
@@ -414,7 +622,7 @@ function Metric({ label, value }: { label: string; value?: number }) {
 }
 
 function viewLabel(view: View) {
-  return view === 'overview' ? 'System Overview' : view === 'reports' ? 'Report Review' : 'Chat Archive';
+  return view === 'overview' ? 'System Overview' : view === 'reports' ? 'Report Review' : view === 'users' ? 'User Management' : 'Chat Archive';
 }
 
 function formatDate(value?: string) {

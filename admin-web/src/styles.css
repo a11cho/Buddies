@@ -14,7 +14,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -90,6 +91,7 @@ button:disabled {
 .login-panel input:focus,
 .topbar input:focus,
 .search-row input:focus,
+textarea:focus,
 select:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
@@ -171,11 +173,17 @@ select:focus {
 
 .topbar input,
 .search-row input,
+textarea,
 select {
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   min-height: 40px;
   padding: 8px 10px;
+}
+
+textarea {
+  min-height: 92px;
+  resize: vertical;
 }
 
 .session-box {
@@ -240,6 +248,19 @@ select {
   font-size: 34px;
 }
 
+.metrics.compact {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  margin-bottom: 18px;
+}
+
+.metrics.compact article {
+  padding: 14px;
+}
+
+.metrics.compact strong {
+  font-size: 24px;
+}
+
 .panel {
   margin-top: 18px;
 }
@@ -261,6 +282,10 @@ select {
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(280px, 380px) 1fr;
+}
+
+.users-grid {
+  grid-template-columns: minmax(300px, 420px) 1fr;
 }
 
 .review-grid .panel {
@@ -317,6 +342,38 @@ dt {
 
 dd {
   margin: 0;
+}
+
+.moderation-form {
+  border-top: 1px solid #e2e8f0;
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
+.moderation-form label {
+  color: #334155;
+  display: grid;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 7px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.history-block {
+  border-top: 1px solid #e2e8f0;
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
+.history-block h3 {
+  margin: 0 0 12px;
 }
 
 .messages {
@@ -407,6 +464,7 @@ th {
   }
 
   .review-grid,
+  .users-grid,
   .topbar {
     grid-template-columns: 1fr;
   }

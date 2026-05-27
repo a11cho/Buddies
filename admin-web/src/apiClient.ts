@@ -78,6 +78,42 @@ export type CurrentUser = {
   role: string;
 };
 
+export type AdminUserPage = {
+  items: AdminUserSummary[];
+  page: number;
+  size: number;
+  totalCount: number;
+};
+
+export type AdminUserSummary = {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  trustScore: number;
+  createdAt: string;
+};
+
+export type AdminUserDetail = AdminUserSummary & {
+  reportedCount: number;
+  reporterCount: number;
+  closedLobbyCount: number;
+  moderationActions: ModerationAction[];
+};
+
+export type ModerationAction = {
+  id: number;
+  actionType: string;
+  reason: string;
+  adminUserId: number;
+  adminName: string;
+  reportId: number | null;
+  startsAt: string;
+  endsAt: string | null;
+  createdAt: string;
+};
+
 type RequestOptions = {
   token?: string;
   query?: Record<string, string | number | boolean | undefined>;
@@ -127,6 +163,32 @@ export class ApiClient {
 
   async getMe(options: RequestOptions = {}): Promise<CurrentUser> {
     return this.request<CurrentUser>('/auth/me', options);
+  }
+
+  async getUsers(status = 'ACTIVE', page = 1, size = 20, options: RequestOptions = {}): Promise<AdminUserPage> {
+    return this.request<AdminUserPage>('/admin/users', {
+      ...options,
+      query: { status, page, size },
+    });
+  }
+
+  async getUser(userId: number, options: RequestOptions = {}): Promise<AdminUserDetail> {
+    return this.request<AdminUserDetail>(`/admin/users/${userId}`, options);
+  }
+
+  async moderateUser(
+    userId: number,
+    actionType: string,
+    reason: string,
+    endsAt: string | null,
+    reportId: number | null,
+    options: RequestOptions = {},
+  ): Promise<MessageResponse> {
+    return this.request<MessageResponse>(`/admin/users/${userId}/moderation-actions`, {
+      ...options,
+      method: 'POST',
+      body: { actionType, reason, endsAt: endsAt ?? undefined, reportId: reportId ?? undefined },
+    });
   }
 
   async verifySignup(email: string, otp: string): Promise<MessageResponse> {

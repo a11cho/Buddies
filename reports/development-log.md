@@ -864,3 +864,162 @@
 - chat archive에서 reported message 강조 표시 확인
   - `reported: true` 메시지 스타일 확인
   - `sender_user_id = null`인 SYSTEM message 표시 확인
+
+### Admin Web 로그인 화면 및 초기 관리자 계정 생성 구현
+
+#### 목적
+
+기존 Admin Web은 관리자가 access token을 직접 입력해야 하는 내부 도구 형태였다. 관리자 사용 흐름을 실제 운영 화면에 가깝게 만들기 위해 이메일/비밀번호 로그인 UI를 추가하고, 서버 초기화 시 ADMIN 계정이 없으면 기본 관리자 계정을 자동 생성하도록 했다.
+
+#### 주요 변경 사항
+
+- Admin Web 로그인 화면 추가
+  - access token 직접 입력 UI를 제거하고 이메일/비밀번호 로그인 폼을 추가
+  - `POST /auth/login`으로 access token을 발급받은 뒤 `/auth/me`로 현재 사용자의 role 확인
+  - role이 `ADMIN`이 아니면 Admin 화면 진입을 차단
+  - 로그인 성공 시 access token을 `localStorage`의 `buddies.admin.accessToken`에 저장
+  - 저장된 token이 있으면 페이지 진입 시 session 검증 후 Admin 화면 로드
+  - 상단에 로그인한 관리자 이름/이메일과 Logout 버튼 표시
+
+- Admin Web 로그인 UI 스타일 추가
+  - 로그인 전용 full-screen 화면과 로그인 패널 스타일 추가
+  - 로그인 오류 메시지와 disabled 버튼 상태 스타일 추가
+  - 기존 대시보드 상단 token input 영역을 session 정보 영역으로 교체
+
+- 초기 관리자 계정 생성 로직 추가
+  - `AdminAccountInitializer` 추가
+  - 서버 시작 시 `ADMIN` role 사용자가 하나도 없으면 기본 관리자 계정을 생성
+  - 기본값은 `admin@kaist.ac.kr` / `Admin123!`
+  - 동일 이메일 사용자가 이미 존재하지만 ADMIN 계정이 없는 경우 해당 사용자를 ADMIN으로 승격
+  - 환경변수로 초기 관리자 설정 변경 가능
+    - `BUDDIES_ADMIN_BOOTSTRAP_ENABLED`
+    - `BUDDIES_ADMIN_BOOTSTRAP_EMAIL`
+    - `BUDDIES_ADMIN_BOOTSTRAP_NAME`
+    - `BUDDIES_ADMIN_BOOTSTRAP_PASSWORD`
+
+- User 도메인 보강
+  - `User`에 role 지정 생성자 추가
+  - 초기 관리자 승격을 위한 `updateRole()` 추가
+  - `UserRepository.existsByRole()` 추가
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/config/AdminAccountInitializer.java`
+- `backend/src/main/java/kr/kaist/buddies/user/domain/User.java`
+- `backend/src/main/java/kr/kaist/buddies/user/domain/UserRepository.java`
+- `backend/src/main/resources/application.yml`
+- `admin-web/src/apiClient.ts`
+- `admin-web/src/main.tsx`
+- `admin-web/src/styles.css`
+- `reports/development-log.md`
+
+#### 검증
+
+- `admin-web`에서 `npm run build`가 성공했다.
+- Vite dev server로 Admin Web을 실행하고 브라우저에서 로그인 화면 렌더링을 확인했다.
+- 로컬 환경에는 `mvn` 명령이 없어 Maven build/test는 수행하지 못했다.
+
+#### 남은 작업
+
+- 실제 backend와 DB를 함께 띄운 뒤 기본 관리자 계정으로 로그인 end-to-end 확인
+- 운영/시연 환경에서는 기본 관리자 비밀번호를 환경변수로 반드시 변경
+- 기본 관리자 계정 생성 정책을 production에서도 허용할지 팀 결정
+
+### 관리자 사용자 조정, 계정 관리 및 시스템 모니터링 기능 보강
+
+#### 목적
+
+`buddies-doc/SDD/6_관리자_사용자조정&계정관리&모니터링.md`에 정의된 사용자 계정 조회, 사용자 정지/차단, 신고 해결, 시스템 모니터링 기능 중 기존 구현에 부족했던 사용자 관리 응답 구조와 Admin Web 사용자 조정 화면을 보강했다.
+
+#### 주요 변경 사항
+
+- 관리자 사용자 목록 API 보강
+  - `GET /admin/users?status=ACTIVE&page=1&size=20` 응답을 `{ items, page, size, totalCount }` 형태로 변경
+  - 사용자 목록 item에 `id`, `email`, `name`, `role`, `status`, `trustScore`, `createdAt` 포함
+  - `ACTIVE`, `SUSPENDED`, `BANNED` 상태 필터 검증 추가
+  - pagination과 total count 반환 추가
+
+- 관리자 사용자 상세 API 보강
+  - `GET /admin/users/{userId}` 응답을 SDD의 사용자 상세 목적에 맞게 확장
+  - 사용자 기본 정보와 함께 다음 통계 반환
+    - `reportedCount`
+    - `reporterCount`
+    - `closedLobbyCount`
+  - 대상 사용자의 `moderation_actions` 이력을 최신순으로 반환
+  - 사용자 상세 조회 시 기존처럼 `VIEW_USER_DETAIL` 감사 로그 기록
+
+- 사용자 조정 조치 로직 보강
+  - `POST /admin/users/{userId}/moderation-actions`에서 `SUSPEND` 조치의 `endsAt` 필수/미래 시각 검증 추가
+  - `WARNING`은 사용자 상태를 변경하지 않고 조정 이력만 기록하도록 수정
+  - `UNSUSPEND`는 사용자 상태를 `ACTIVE`로 변경
+  - `BAN`은 사용자 상태를 `BANNED`로 변경
+  - ISO instant 및 offset datetime 입력을 모두 처리할 수 있도록 datetime parser 보강
+  - self-moderation 방지와 `admin_audit_logs` 기록은 유지
+
+- Admin Web 사용자 관리 화면 추가
+  - sidebar에 `Users` 탭 추가
+  - 사용자 상태 필터 `ACTIVE`, `SUSPENDED`, `BANNED` 추가
+  - 사용자 목록과 선택된 사용자 상세 패널 추가
+  - 상세 패널에 신고 받은 수, 신고한 수, 닫힌 로비 수, Trust Score 표시
+  - 사용자 조정 폼 추가
+    - `WARNING`
+    - `SUSPEND`
+    - `BAN`
+    - `UNSUSPEND`
+  - `SUSPEND` 선택 시 정지 종료 시각 입력 필드 표시
+  - 관련 report ID 선택 입력 지원
+  - 조정 이력 목록 표시
+  - 조정 성공 후 사용자 목록과 overview 통계 재조회
+
+- Admin Web API client 확장
+  - `getUsers()`
+  - `getUser()`
+  - `moderateUser()`
+  - 사용자 목록/상세/조정 이력 TypeScript 타입 추가
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminController.java`
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminService.java`
+- `admin-web/src/apiClient.ts`
+- `admin-web/src/main.tsx`
+- `admin-web/src/styles.css`
+- `reports/development-log.md`
+
+#### SRS/SDD 충족 확인
+
+- `REQ-ADMIN-6`
+  - Admin Web에서 사용자에게 `WARNING`, `SUSPEND`, `BAN`, `UNSUSPEND` 조치를 적용할 수 있도록 연결
+  - Backend에서 조정 조치를 `moderation_actions`에 기록
+
+- `REQ-ADMIN-7`
+  - 조정 조치에 따라 `users.status`를 `ACTIVE`, `SUSPENDED`, `BANNED`로 갱신
+  - 구체적인 보호 API별 접근 제한 정책은 기존 인증/권한 계층에서 추가 보강 필요
+
+- `REQ-ADMIN-8`
+  - 기존 `PATCH /admin/reports/{reportId}/resolve`와 Admin Web 신고 해결 버튼을 유지
+
+- `REQ-ADMIN-9`
+  - 해결된 신고는 삭제하지 않고 `reports`에 `resolution_note`, `resolved_by_admin_id`, `resolved_at`을 기록하는 기존 구현 유지
+
+- Admin 사용자 계정 상세 조회
+  - 사용자 기본 정보, 신고 관련 count, 닫힌 로비 count, 조정 이력을 Admin 화면에서 확인 가능
+
+- Admin 시스템 모니터링
+  - 기존 `/admin/system/overview` 기반 overview 화면을 유지
+  - 사용자 조정 후 overview 통계를 재조회하도록 Admin Web 흐름 보강
+
+#### 검증
+
+- `admin-web`에서 `npm run build`가 성공했다.
+- Vite dev server로 로그인 화면 렌더링을 확인했다.
+- 브라우저의 현재 Admin Web 화면에서 로그인 페이지가 정상 표시됨을 확인했다.
+- 로컬 환경에는 `mvn` 명령이 없어 Maven build/test는 수행하지 못했다.
+
+#### 남은 작업
+
+- 실제 backend와 DB를 함께 띄운 상태에서 ADMIN 계정으로 Users 탭 end-to-end 확인
+- `SUSPENDED` 사용자의 로비 생성, 로비 참여, 채팅, 결제 확인, 신고 제출 제한을 API middleware/service 단에서 일관되게 적용
+- `BANNED` 사용자의 로그인 또는 보호 API 접근 차단 범위 최종 확정 및 구현
+- 사용자 상세의 최근 활동 시각과 참여 로비 이력 상세 응답이 필요하면 API 확장
+- 영구 차단 해제(`BANNED → ACTIVE`)에 별도 확인 절차를 둘지 팀 결정

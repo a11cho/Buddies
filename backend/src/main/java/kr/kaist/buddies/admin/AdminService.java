@@ -3,6 +3,8 @@ package kr.kaist.buddies.admin;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import kr.kaist.buddies.admin.domain.AdminAuditLog;
 import kr.kaist.buddies.admin.domain.AdminAuditLogRepository;
@@ -189,34 +191,66 @@ public class AdminService {
     }
 
     @Transactional(readOnly = true)
-    public List<AdminController.AdminUserResponse> users(String status, int page, int size) {
+    public AdminController.AdminUserPageResponse users(String status, int page, int size) {
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), 100);
-        String sql = status == null || status.isBlank()
-            ? "select id, email, name, status, trust_score from users order by created_at desc limit ? offset ?"
-            : "select id, email, name, status, trust_score from users where status = ? order by created_at desc limit ? offset ?";
-        Object[] args = status == null || status.isBlank()
+        boolean filtered = status != null && !status.isBlank();
+        String normalizedStatus = filtered ? parseUserStatus(status).name() : null;
+        String sql = !filtered
+            ? "select id, email, name, role, status, trust_score, created_at from users order by created_at desc limit ? offset ?"
+            : "select id, email, name, role, status, trust_score, created_at from users where status = ? order by created_at desc limit ? offset ?";
+        Object[] args = !filtered
             ? new Object[] {safeSize, (safePage - 1) * safeSize}
-            : new Object[] {status, safeSize, (safePage - 1) * safeSize};
-        return jdbcTemplate.query(sql, (rs, rowNum) -> new AdminController.AdminUserResponse(
+            : new Object[] {normalizedStatus, safeSize, (safePage - 1) * safeSize};
+        List<AdminController.AdminUserSummaryResponse> items = jdbcTemplate.query(sql, (rs, rowNum) -> new AdminController.AdminUserSummaryResponse(
             rs.getLong("id"),
             rs.getString("email"),
             rs.getString("name"),
+            rs.getString("role"),
             rs.getString("status"),
-            rs.getBigDecimal("trust_score").doubleValue()
+            rs.getBigDecimal("trust_score").doubleValue(),
+            stringOrNull(rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toInstant())
         ), args);
+        Long totalCount = !filtered
+            ? jdbcTemplate.queryForObject("select count(*) from users", Long.class)
+            : jdbcTemplate.queryForObject("select count(*) from users where status = ?", Long.class, normalizedStatus);
+        return new AdminController.AdminUserPageResponse(items, safePage, safeSize, nullToZero(totalCount));
     }
 
     @Transactional
-    public AdminController.AdminUserResponse user(AuthenticatedUser admin, Long userId) {
+    public AdminController.AdminUserDetailResponse user(AuthenticatedUser admin, Long userId) {
         User user = userOrNotFound(userId);
         audit(admin.id(), "VIEW_USER_DETAIL", "USER", userId, null);
-        return new AdminController.AdminUserResponse(
+        Long reportedCount = jdbcTemplate.queryForObject("select count(*) from reports where reported_user_id = ?", Long.class, userId);
+        Long reporterCount = jdbcTemplate.queryForObject("select count(*) from reports where reporter_user_id = ?", Long.class, userId);
+        Long closedLobbyCount = jdbcTemplate.queryForObject(
+            """
+            select count(distinct l.id)
+            from lobbies l
+            left join lobby_memberships lm on lm.lobby_id = l.id
+            where l.order_status = 'CLOSED'
+              and (l.host_user_id = ? or lm.user_id = ?)
+            """,
+            Long.class,
+            userId,
+            userId
+        );
+        List<AdminController.ModerationActionResponse> moderationActions = moderationActionRepository.findByTargetUserIdOrderByCreatedAtDesc(userId)
+            .stream()
+            .map(this::moderationActionResponse)
+            .toList();
+        return new AdminController.AdminUserDetailResponse(
             user.getId(),
             user.getEmail(),
             user.getName(),
+            user.getRole().name(),
             user.getStatus().name(),
-            user.getTrustScore().doubleValue()
+            user.getTrustScore().doubleValue(),
+            stringOrNull(user.getCreatedAt()),
+            nullToZero(reportedCount),
+            nullToZero(reporterCount),
+            nullToZero(closedLobbyCount),
+            moderationActions
         );
     }
 
@@ -230,10 +264,17 @@ public class AdminService {
         Report report = request.reportId() == null ? null : reportRepository.findById(request.reportId())
             .orElseThrow(() -> notFound("Report not found."));
         ModerationActionType actionType = parseModerationActionType(request.actionType());
-        Instant endsAt = request.endsAt() == null || request.endsAt().isBlank() ? null : Instant.parse(request.endsAt());
+        Instant endsAt = parseOptionalInstant(request.endsAt());
+        if (actionType == ModerationActionType.SUSPEND && (endsAt == null || !endsAt.isAfter(Instant.now()))) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "Suspension end time must be in the future.");
+        }
+        if (actionType != ModerationActionType.SUSPEND) {
+            endsAt = null;
+        }
 
         moderationActionRepository.save(new ModerationAction(targetUser, adminUser, report, actionType, request.reason(), Instant.now(), endsAt));
-        targetUser.applyStatus(statusFor(actionType), actionType == ModerationActionType.SUSPEND ? endsAt : null);
+        UserStatus nextStatus = statusFor(actionType, targetUser.getStatus());
+        targetUser.applyStatus(nextStatus, actionType == ModerationActionType.SUSPEND ? endsAt : null);
         auditLogRepository.save(new AdminAuditLog(adminUser, "CREATE_MODERATION_ACTION", "USER", userId, "{\"actionType\":\"" + actionType.name() + "\"}"));
     }
 
@@ -360,12 +401,52 @@ public class AdminService {
         }
     }
 
-    private UserStatus statusFor(ModerationActionType actionType) {
+    private UserStatus parseUserStatus(String status) {
+        try {
+            return UserStatus.valueOf(status);
+        } catch (IllegalArgumentException exception) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "Invalid user status.");
+        }
+    }
+
+    private Instant parseOptionalInstant(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(value);
+        } catch (DateTimeParseException exception) {
+            try {
+                return OffsetDateTime.parse(value).toInstant();
+            } catch (DateTimeParseException ignored) {
+                throw new AuthException(HttpStatus.BAD_REQUEST, "Invalid datetime value.");
+            }
+        }
+    }
+
+    private UserStatus statusFor(ModerationActionType actionType, UserStatus currentStatus) {
         return switch (actionType) {
-            case WARNING, UNSUSPEND -> UserStatus.ACTIVE;
+            case WARNING -> currentStatus;
+            case UNSUSPEND -> UserStatus.ACTIVE;
             case SUSPEND -> UserStatus.SUSPENDED;
             case BAN -> UserStatus.BANNED;
         };
+    }
+
+    private AdminController.ModerationActionResponse moderationActionResponse(ModerationAction action) {
+        Report report = action.getReport();
+        User adminUser = action.getAdminUser();
+        return new AdminController.ModerationActionResponse(
+            action.getId(),
+            action.getActionType().name(),
+            action.getReason(),
+            adminUser.getId(),
+            adminUser.getName(),
+            report == null ? null : report.getId(),
+            stringOrNull(action.getStartsAt()),
+            stringOrNull(action.getEndsAt()),
+            stringOrNull(action.getCreatedAt())
+        );
     }
 
     private AuthException notFound(String message) {

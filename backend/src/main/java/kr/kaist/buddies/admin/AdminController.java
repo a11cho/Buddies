@@ -73,7 +73,7 @@ public class AdminController {
     }
 
     @GetMapping("/admin/users")
-    public List<AdminUserResponse> users(
+    public AdminUserPageResponse users(
         @RequestParam(required = false) String status,
         @RequestParam(defaultValue = "1") int page,
         @RequestParam(defaultValue = "20") int size
@@ -82,7 +82,7 @@ public class AdminController {
     }
 
     @GetMapping("/admin/users/{userId}")
-    public AdminUserResponse user(@CurrentUser AuthenticatedUser admin, @PathVariable Long userId) {
+    public AdminUserDetailResponse user(@CurrentUser AuthenticatedUser admin, @PathVariable Long userId) {
         return adminService.user(admin, userId);
     }
 
@@ -132,7 +132,22 @@ public class AdminController {
         boolean reported,
         String createdAt
     ) {}
-    public record AdminUserResponse(Long id, String email, String name, String status, double trustScore) {}
+    public record AdminUserSummaryResponse(Long id, String email, String name, String role, String status, double trustScore, String createdAt) {}
+    public record AdminUserPageResponse(List<AdminUserSummaryResponse> items, int page, int size, long totalCount) {}
+    public record AdminUserDetailResponse(
+        Long id,
+        String email,
+        String name,
+        String role,
+        String status,
+        double trustScore,
+        String createdAt,
+        long reportedCount,
+        long reporterCount,
+        long closedLobbyCount,
+        List<ModerationActionResponse> moderationActions
+    ) {}
+    public record ModerationActionResponse(Long id, String actionType, String reason, Long adminUserId, String adminName, Long reportId, String startsAt, String endsAt, String createdAt) {}
     public record AdminLobbyResponse(Long lobbyId, String restaurantName, String deliveryLocation, Long hostUserId, long currentTotal, String orderStatus, boolean cartLocked) {}
     public record AdminPaymentRecordResponse(Long id, Long userId, String userName, long amount, String status, String confirmedAt) {}
     public record SystemOverviewResponse(
