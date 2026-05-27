@@ -31,7 +31,7 @@ class LobbyListScreen extends StatelessWidget {
           const StatusCard(title: 'Delivery Zone', value: 'KAIST Campus'),
           StatusCard(
             title: 'Active Lobby',
-            value: '${mockLobbyPreviews.length} mock lobbies',
+            value: '${mockLobbies.length} mock lobbies',
           ),
           const StatusCard(title: 'Mock Mode', value: 'Enabled'),
           const SizedBox(height: 8),
@@ -40,15 +40,16 @@ class LobbyListScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
-          for (final lobby in mockLobbyPreviews)
+          for (final lobby in mockLobbies)
             LobbyCard(
               restaurantName: lobby.restaurantName,
               deliveryZone: lobby.deliveryZone,
               currentTotalAmount: lobby.currentTotalAmount,
               minimumOrderAmount: lobby.minimumOrderAmount,
               remainingAmount: lobby.remainingAmount,
-              participantCount: lobby.participantCount,
+              participantCount: lobby.participantCount ?? lobby.members.length,
               orderStatus: lobby.orderStatus,
+              unreadCount: lobby.unreadCount,
               canJoin: lobby.canJoin,
               onJoin: () {
                 ScaffoldMessenger.of(context).showSnackBar(

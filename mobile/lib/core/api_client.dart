@@ -21,8 +21,35 @@ class ApiClient {
   // 예: /lobbies -> http://10.0.2.2:8080/api/lobbies
   Uri buildUri(String path) {
     final baseUri = Uri.parse(config.baseUrl);
-    final normalizedBase = baseUri.path.endsWith('/') ? baseUri.path : '${baseUri.path}/';
+    final normalizedBase =
+        baseUri.path.endsWith('/') ? baseUri.path : '${baseUri.path}/';
     final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
     return baseUri.replace(path: '$normalizedBase$normalizedPath');
   }
+}
+
+// 백엔드 에러 response가 최종 확정되기 전까지 사용할 에러 메시지 추출 helper입니다.
+// 업데이트된 가정 기준으로 error를 가장 먼저 보고, message/errorCode를 fallback으로 봅니다.
+String extractApiErrorMessage(
+  Object? responseBody, {
+  String fallbackMessage = 'Request failed.',
+}) {
+  if (responseBody is Map<String, dynamic>) {
+    final error = responseBody['error'];
+    if (error is String && error.isNotEmpty) {
+      return error;
+    }
+
+    final message = responseBody['message'];
+    if (message is String && message.isNotEmpty) {
+      return message;
+    }
+
+    final errorCode = responseBody['errorCode'];
+    if (errorCode is String && errorCode.isNotEmpty) {
+      return errorCode;
+    }
+  }
+
+  return fallbackMessage;
 }

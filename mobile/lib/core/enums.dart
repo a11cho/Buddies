@@ -1,3 +1,31 @@
+// User 계정 상태입니다.
+// SUSPENDED 또는 BANNED 사용자는 주요 기능 접근이 제한될 수 있습니다.
+class UserStatus {
+  const UserStatus._();
+
+  static const active = 'ACTIVE';
+  static const suspended = 'SUSPENDED';
+  static const banned = 'BANNED';
+}
+
+// Lobby 안에서의 역할입니다.
+class RoleInLobby {
+  const RoleInLobby._();
+
+  static const host = 'HOST';
+  static const participant = 'PARTICIPANT';
+}
+
+// Lobby membership 상태입니다.
+class MembershipStatus {
+  const MembershipStatus._();
+
+  static const active = 'ACTIVE';
+  static const left = 'LEFT';
+  static const kicked = 'KICKED';
+  static const removedByTransfer = 'REMOVED_BY_TRANSFER';
+}
+
 // Lobby 상태 문자열을 한 곳에서 관리합니다.
 // 화면에서 'WAITING' 같은 문자열을 직접 비교하면 오타를 찾기 어렵습니다.
 class LobbyStatus {

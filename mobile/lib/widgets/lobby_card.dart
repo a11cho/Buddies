@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 // Lobby 목록에서 Lobby 하나를 보여주는 카드입니다.
-// Phase 3에서 Lobby model이 생기면 primitive parameter 대신 model을 받을 수 있습니다.
+// unreadCount는 사용자가 참여 중인 Lobby의 안 읽은 채팅 수 badge에 사용합니다.
 class LobbyCard extends StatelessWidget {
   const LobbyCard({
     required this.restaurantName,
@@ -11,6 +11,7 @@ class LobbyCard extends StatelessWidget {
     required this.remainingAmount,
     required this.participantCount,
     required this.orderStatus,
+    this.unreadCount = 0,
     this.onTap,
     this.onJoin,
     this.canJoin = false,
@@ -24,6 +25,7 @@ class LobbyCard extends StatelessWidget {
   final int remainingAmount;
   final int participantCount;
   final String orderStatus;
+  final int unreadCount;
   final VoidCallback? onTap;
   final VoidCallback? onJoin;
   final bool canJoin;
@@ -52,6 +54,10 @@ class LobbyCard extends StatelessWidget {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
+                  if (unreadCount > 0) ...[
+                    _UnreadBadge(count: unreadCount),
+                    const SizedBox(width: 8),
+                  ],
                   _StatusBadge(label: orderStatus),
                 ],
               ),
@@ -91,6 +97,29 @@ class LobbyCard extends StatelessWidget {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UnreadBadge extends StatelessWidget {
+  const _UnreadBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          count > 99 ? '99+' : '$count',
+          style: Theme.of(context).textTheme.labelSmall,
         ),
       ),
     );
