@@ -20,4 +20,13 @@ public interface CartItemRepository extends JpaRepository<CartItem, Long> {
           and c.deletedAt is null
         """)
     long sumActiveSubtotalByLobbyId(@Param("lobbyId") Long lobbyId);
+
+    @Query("""
+        select coalesce(sum(c.subtotal), 0)
+        from CartItem c
+        where c.lobby.id = :lobbyId
+          and c.owner.id = :ownerId
+          and c.deletedAt is null
+        """)
+    long sumActiveSubtotalByLobbyIdAndOwnerId(@Param("lobbyId") Long lobbyId, @Param("ownerId") Long ownerId);
 }

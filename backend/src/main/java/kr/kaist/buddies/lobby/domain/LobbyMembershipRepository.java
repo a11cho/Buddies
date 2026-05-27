@@ -1,5 +1,6 @@
 package kr.kaist.buddies.lobby.domain;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -21,6 +22,8 @@ public interface LobbyMembershipRepository extends JpaRepository<LobbyMembership
     Optional<LobbyMembership> findByLobby_IdAndUser_IdAndStatus(Long lobbyId, Long userId, LobbyMembershipStatus status);
 
     Optional<LobbyMembership> findByLobby_IdAndRoleInLobbyAndStatus(Long lobbyId, LobbyMemberRole roleInLobby, LobbyMembershipStatus status);
+
+    List<LobbyMembership> findByLobby_IdAndStatus(Long lobbyId, LobbyMembershipStatus status);
 
     long countByLobby_IdAndStatus(Long lobbyId, LobbyMembershipStatus status);
 }

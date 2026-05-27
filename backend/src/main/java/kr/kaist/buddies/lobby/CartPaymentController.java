@@ -20,9 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/lobbies/{lobbyId}")
 public class CartPaymentController {
     private final CartService cartService;
+    private final PaymentService paymentService;
 
-    public CartPaymentController(CartService cartService) {
+    public CartPaymentController(CartService cartService, PaymentService paymentService) {
         this.cartService = cartService;
+        this.paymentService = paymentService;
     }
 
     @GetMapping("/cart-items")
@@ -46,18 +48,30 @@ public class CartPaymentController {
     }
 
     @GetMapping("/payment-records")
-    public List<PaymentRecordResponse> paymentRecords(@PathVariable Long lobbyId) {
-        return List.of();
+    public List<PaymentRecordResponse> paymentRecords(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+        return paymentService.list(user.id(), lobbyId);
     }
 
     @PostMapping("/payment-records/{paymentRecordId}/confirm")
-    public MessageResponse confirmPayment(@PathVariable Long lobbyId, @PathVariable Long paymentRecordId) {
-        return new MessageResponse("Payment " + paymentRecordId + " confirmed for lobby " + lobbyId);
+    public PaymentRecordResponse confirmPayment(
+        @CurrentUser AuthenticatedUser user,
+        @PathVariable Long lobbyId,
+        @PathVariable Long paymentRecordId
+    ) {
+        return paymentService.confirm(user.id(), lobbyId, paymentRecordId);
     }
 
     public record CartItemRequest(@NotBlank String itemName, @NotNull @Positive Long unitPrice, @NotNull @Positive Integer quantity) {}
     public record CartItemResponse(Long cartItemId, Long lobbyId, Long ownerUserId, String itemName, long unitPrice, int quantity, long subtotal, long currentTotalAmount) {}
     public record DeleteCartItemResponse(Long cartItemId, Long lobbyId, String deletedAt, long currentTotalAmount) {}
-    public record PaymentRecordResponse(Long id, Long userId, long amount, String status) {}
+    public record PaymentRecordResponse(
+        Long paymentRecordId,
+        Long lobbyId,
+        Long userId,
+        long amount,
+        String status,
+        Long confirmedByHostId,
+        String confirmedAt
+    ) {}
     public record MessageResponse(String message) {}
 }

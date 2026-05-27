@@ -37,19 +37,22 @@ public class LobbyService {
     private final UserRepository userRepository;
     private final CartService cartService;
     private final ChatReadService chatReadService;
+    private final PaymentService paymentService;
 
     public LobbyService(
         LobbyRepository lobbyRepository,
         LobbyMembershipRepository lobbyMembershipRepository,
         UserRepository userRepository,
         CartService cartService,
-        ChatReadService chatReadService
+        ChatReadService chatReadService,
+        PaymentService paymentService
     ) {
         this.lobbyRepository = lobbyRepository;
         this.lobbyMembershipRepository = lobbyMembershipRepository;
         this.userRepository = userRepository;
         this.cartService = cartService;
         this.chatReadService = chatReadService;
+        this.paymentService = paymentService;
     }
 
     @Transactional(readOnly = true)
@@ -127,6 +130,7 @@ public class LobbyService {
 
         String previousStatus = lobby.getOrderStatus().name();
         lobby.lockCart(Instant.now());
+        paymentService.createOrRefreshForLockedLobby(lobby, userId);
         return new LockCartResponse(lobbyId, previousStatus, lobby.getOrderStatus().name(), lobby.getCartLockedAt().toString());
     }
 
@@ -136,6 +140,9 @@ public class LobbyService {
         requireHost(lobbyId, userId);
         LobbyOrderStatus nextStatus = parseOrderStatus(request.newStatus());
         validateStatusTransition(lobby, nextStatus);
+        if (nextStatus == LobbyOrderStatus.ORDER_PLACED && !paymentService.allPayableRecordsPaid(lobbyId)) {
+            throw new AuthException(HttpStatus.CONFLICT, "모든 정산 기록이 PAID 상태가 아닙니다.");
+        }
 
         String previousStatus = lobby.getOrderStatus().name();
         lobby.changeStatus(nextStatus, Instant.now());
@@ -188,7 +195,11 @@ public class LobbyService {
         }
 
         target.kick(Instant.now());
-        cartService.deleteActiveItemsOwnedBy(lobbyId, request.targetUserId());
+        if (lobby.getOrderStatus() == LobbyOrderStatus.WAITING) {
+            cartService.deleteActiveItemsOwnedBy(lobbyId, request.targetUserId());
+        } else if (lobby.getOrderStatus() == LobbyOrderStatus.LOCKED) {
+            paymentService.markInactiveForUser(lobbyId, request.targetUserId());
+        }
         return new KickParticipantResponse(lobbyId, request.targetUserId(), target.getStatus().name(), userId);
     }
 
