@@ -47,3 +47,9 @@ buddies:
     password-reset-subject: ${BUDDIES_MAIL_PASSWORD_RESET_SUBJECT:Buddies 비밀번호 재설정}
   password-reset:
     url-template: ${BUDDIES_PASSWORD_RESET_URL_TEMPLATE:https://localhost:8443/password-reset?token=%s}
+  admin:
+    bootstrap:
+      enabled: ${BUDDIES_ADMIN_BOOTSTRAP_ENABLED:true}
+      email: ${BUDDIES_ADMIN_BOOTSTRAP_EMAIL:allcho@kaist.ac.kr}
+      name: ${BUDDIES_ADMIN_BOOTSTRAP_NAME:Buddies Admin}
+      password: ${BUDDIES_ADMIN_BOOTSTRAP_PASSWORD:Admin123!}

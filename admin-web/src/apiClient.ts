@@ -71,6 +71,13 @@ export type RecentLobby = {
   createdAt: string;
 };
 
+export type CurrentUser = {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+};
+
 type RequestOptions = {
   token?: string;
   query?: Record<string, string | number | boolean | undefined>;
@@ -116,6 +123,10 @@ export class ApiClient {
       method: 'POST',
       body: { email, password },
     });
+  }
+
+  async getMe(options: RequestOptions = {}): Promise<CurrentUser> {
+    return this.request<CurrentUser>('/auth/me', options);
   }
 
   async verifySignup(email: string, otp: string): Promise<MessageResponse> {

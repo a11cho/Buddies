@@ -4,6 +4,7 @@ import {
   ApiClient,
   ApiError,
   type ChatArchive,
+  type CurrentUser,
   type ReportDetail,
   type ReportPage,
   type ReportSummary,
@@ -18,6 +19,7 @@ type View = 'overview' | 'reports' | 'archive';
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(tokenStorageKey) ?? '');
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [view, setView] = useState<View>('overview');
   const [overview, setOverview] = useState<SystemOverview | null>(null);
   const [reports, setReports] = useState<ReportPage | null>(null);
@@ -26,6 +28,8 @@ function App() {
   const [status, setStatus] = useState('OPEN');
   const [archiveLobbyId, setArchiveLobbyId] = useState('');
   const [message, setMessage] = useState('');
+  const [loginMessage, setLoginMessage] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const authOptions = useMemo(() => ({ token }), [token]);
 
   useEffect(() => {
@@ -33,24 +37,71 @@ function App() {
       return;
     }
     localStorage.setItem(tokenStorageKey, token);
-    loadOverview();
-    loadReports(status);
+    verifySession(token);
   }, [token]);
 
-  async function loadOverview() {
+  async function verifySession(nextToken: string) {
     try {
-      setOverview(await apiClient.getSystemOverview(authOptions));
+      const me = await apiClient.getMe({ token: nextToken });
+      if (me.role !== 'ADMIN') {
+        throw new ApiError(403, 'Admin role is required.');
+      }
+      setCurrentUser(me);
+      setLoginMessage('');
+      await loadOverview(nextToken);
+      await loadReports(status, nextToken);
+    } catch (error) {
+      clearSession();
+      setLoginMessage(errorMessage(error));
+    }
+  }
+
+  async function login(email: string, password: string) {
+    setIsLoggingIn(true);
+    setLoginMessage('');
+    try {
+      const response = await apiClient.login(email, password);
+      const me = await apiClient.getMe({ token: response.accessToken });
+      if (me.role !== 'ADMIN') {
+        throw new ApiError(403, 'Admin role is required.');
+      }
+      localStorage.setItem(tokenStorageKey, response.accessToken);
+      setCurrentUser(me);
+      setToken(response.accessToken);
+      await loadOverview(response.accessToken);
+      await loadReports(status, response.accessToken);
+    } catch (error) {
+      clearSession();
+      setLoginMessage(errorMessage(error));
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
+  function clearSession() {
+    localStorage.removeItem(tokenStorageKey);
+    setToken('');
+    setCurrentUser(null);
+    setOverview(null);
+    setReports(null);
+    setSelectedReport(null);
+    setArchive(null);
+  }
+
+  async function loadOverview(nextToken = token) {
+    try {
+      setOverview(await apiClient.getSystemOverview({ token: nextToken }));
     } catch (error) {
       setMessage(errorMessage(error));
     }
   }
 
-  async function loadReports(nextStatus = status) {
+  async function loadReports(nextStatus = status, nextToken = token) {
     try {
-      const page = await apiClient.getReports(nextStatus, 1, 20, authOptions);
+      const page = await apiClient.getReports(nextStatus, 1, 20, { token: nextToken });
       setReports(page);
       if (page.items.length > 0) {
-        await selectReport(page.items[0]);
+        await selectReport(page.items[0], nextToken);
       } else {
         setSelectedReport(null);
         setArchive(null);
@@ -60,11 +111,11 @@ function App() {
     }
   }
 
-  async function selectReport(report: ReportSummary) {
+  async function selectReport(report: ReportSummary, nextToken = token) {
     try {
-      const detail = await apiClient.getReport(report.reportId, authOptions);
+      const detail = await apiClient.getReport(report.reportId, { token: nextToken });
       setSelectedReport(detail);
-      setArchive(await apiClient.getChatArchive(detail.lobbyId, authOptions));
+      setArchive(await apiClient.getChatArchive(detail.lobbyId, { token: nextToken }));
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -98,6 +149,10 @@ function App() {
     }
   }
 
+  if (!token || !currentUser) {
+    return <LoginScreen message={loginMessage} isLoading={isLoggingIn} onLogin={login} />;
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar">
@@ -114,16 +169,14 @@ function App() {
             <p>KAIST delivery coordination moderation</p>
             <h2>{viewLabel(view)}</h2>
           </div>
-          <input
-            aria-label="Admin access token"
-            placeholder="Admin access token"
-            value={token}
-            onChange={(event) => setToken(event.target.value.trim())}
-          />
+          <div className="session-box">
+            <span>{currentUser.name}</span>
+            <small>{currentUser.email}</small>
+            <button onClick={clearSession}>Logout</button>
+          </div>
         </header>
 
         {message && <div className="notice">{message}</div>}
-        {!token && <div className="notice">Paste an ADMIN access token to load protected moderation data.</div>}
 
         {view === 'overview' && <Overview overview={overview} />}
         {view === 'reports' && (
@@ -148,6 +201,57 @@ function App() {
             onLoad={loadArchiveByLobby}
           />
         )}
+      </section>
+    </main>
+  );
+}
+
+function LoginScreen(props: {
+  message: string;
+  isLoading: boolean;
+  onLogin: (email: string, password: string) => void;
+}) {
+  const [email, setEmail] = useState('admin@kaist.ac.kr');
+  const [password, setPassword] = useState('');
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    props.onLogin(email.trim(), password);
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="login-panel">
+        <div>
+          <p className="eyebrow">Buddies Admin</p>
+          <h1>Sign in to moderation</h1>
+        </div>
+        <form onSubmit={submit}>
+          <label>
+            Email
+            <input
+              autoComplete="username"
+              inputMode="email"
+              placeholder="admin@kaist.ac.kr"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
+          <label>
+            Password
+            <input
+              autoComplete="current-password"
+              placeholder="Password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          {props.message && <div className="login-error">{props.message}</div>}
+          <button className="primary login-button" disabled={props.isLoading || !email || !password}>
+            {props.isLoading ? 'Signing in...' : 'Sign In'}
+          </button>
+        </form>
       </section>
     </main>
   );

@@ -22,6 +22,93 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.login-shell {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(17, 24, 39, 0.88), rgba(37, 99, 235, 0.72)),
+    url("https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1800&q=80");
+  background-position: center;
+  background-size: cover;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.login-panel {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+  display: grid;
+  gap: 24px;
+  max-width: 420px;
+  padding: 32px;
+  width: 100%;
+}
+
+.eyebrow {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.login-panel h1 {
+  font-size: 30px;
+  line-height: 1.12;
+  margin: 0;
+}
+
+.login-panel form {
+  display: grid;
+  gap: 16px;
+}
+
+.login-panel label {
+  color: #334155;
+  display: grid;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 7px;
+}
+
+.login-panel input {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  min-height: 44px;
+  padding: 9px 11px;
+}
+
+.login-panel input:focus,
+.topbar input:focus,
+.search-row input:focus,
+select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+  outline: none;
+}
+
+.login-button {
+  min-height: 44px;
+  width: 100%;
+}
+
+.login-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #b91c1c;
+  padding: 10px 12px;
+}
+
 .shell {
   display: grid;
   grid-template-columns: 248px 1fr;
@@ -91,9 +178,33 @@ select {
   padding: 8px 10px;
 }
 
-.topbar input {
-  max-width: 440px;
-  width: 42vw;
+.session-box {
+  align-items: flex-end;
+  display: grid;
+  gap: 2px 12px;
+  grid-template-columns: 1fr auto;
+  text-align: right;
+}
+
+.session-box span {
+  font-weight: 700;
+}
+
+.session-box small {
+  color: #64748b;
+  grid-column: 1;
+}
+
+.session-box button {
+  align-self: center;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #334155;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-height: 36px;
+  padding: 7px 10px;
 }
 
 .notice {
@@ -276,6 +387,38 @@ th {
 .empty {
   color: #64748b;
   margin: 0;
+}
+
+@media (max-width: 860px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    padding: 18px 20px;
+  }
+
+  .sidebar nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .content {
+    padding: 22px;
+  }
+
+  .review-grid,
+  .topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .session-box {
+    text-align: left;
+  }
 }
 
 @media (max-width: 900px) {

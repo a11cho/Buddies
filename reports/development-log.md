@@ -690,6 +690,65 @@
 
 ## 2026-05-27
 
+### 회원가입 OTP SMTP 발송 실패 진단 및 HTTPS 전환 후속 수정
+
+#### 목적
+
+회원가입 시 OTP 이메일 발송이 실패하는 문제를 점검했다. 서버와 클라이언트 통신을 HTTP에서 HTTPS로 변경한 이후 관련 설정이 일부 이전 값과 섞여 있었고, SMTP 발송 실패 시 실제 원인이 서버 로그에 남지 않아 문제 원인 파악이 어려운 상태였다. HTTPS 8443 기준으로 클라이언트/문서를 정리하고, SMTP 발송 실패의 상세 예외를 로그에 남기도록 개선했다.
+
+#### 원인 분석
+
+- HTTPS 전환 자체는 SMTP 서버 연결과 직접적으로 연결되지 않는다.
+- Docker 백엔드는 `https://localhost:8443`에서 정상 기동 중임을 확인했다.
+- `backend/config/mail-secrets.yml`의 `buddies.mail.from` 값이 예시값 `your-email@example.com`으로 남아 있어, Gmail SMTP 사용 시 인증 계정과 다른 From 주소로 인해 발신자 거부가 발생할 가능성이 컸다.
+- `EmailOtpSender`가 `MailException`을 사용자용 공통 오류 메시지로 감싸면서 실제 SMTP 원인을 로그에 남기지 않아, Gmail 인증 실패, From 거부, STARTTLS 오류, timeout 등을 구분하기 어려웠다.
+- 백업 모바일 인증 클라이언트의 기본 API URL이 여전히 `http://10.0.2.2:8080/api`로 남아 있어 HTTPS 8443 백엔드에 도달하지 못할 수 있었다.
+- `admin-web/README.md`에도 Vite proxy 대상이 예전 `http://localhost:8080`으로 안내되어 있었다.
+
+#### 주요 변경 사항
+
+- SMTP 실패 원인 로깅 추가
+  - `EmailOtpSender`에 SLF4J logger 추가
+  - 회원가입 OTP 발송 실패 시 대상 이메일과 `MailException` stack trace를 warn 로그로 기록
+  - 비밀번호 재설정 메일 발송 실패도 동일하게 실제 예외를 로그로 기록
+  - 클라이언트 응답 메시지는 기존 사용자 친화적 오류 문구를 유지
+
+- 로컬 SMTP 설정 보정
+  - `backend/config/mail-secrets.yml`의 `buddies.mail.from`을 `${spring.mail.username}`으로 변경
+  - SMTP 인증 계정과 From 주소가 일치하도록 하여 Gmail SMTP의 발신자 거부 가능성을 줄임
+  - 비밀번호 재설정 URL template을 `https://localhost:8443/password-reset?token=%s`로 수정
+
+- HTTPS 8443 클라이언트 설정 정리
+  - `mobile_test_backup_auth/mobile/lib/api_client.dart`의 기본 `API_BASE_URL`을 `https://10.0.2.2:8443/api`로 변경
+  - Android emulator/localhost 개발 환경에서 self-signed HTTPS 인증서를 허용하는 로컬 개발용 `badCertificateCallback` 추가
+  - non-local API는 기존처럼 HTTPS를 요구하도록 유지
+
+- 문서 정리
+  - `admin-web/README.md`의 Vite proxy 안내를 `https://localhost:8443` 기준으로 수정
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/auth/EmailOtpSender.java`
+- `backend/config/mail-secrets.yml`
+- `mobile_test_backup_auth/mobile/lib/api_client.dart`
+- `admin-web/README.md`
+- `reports/development-log.md`
+
+#### 검증
+
+- `docker compose ps`로 `buddies-backend`와 `buddies-postgres` 컨테이너가 실행 중임을 확인했다.
+- Docker 컨테이너 내부에서 `https://localhost:8443/actuator/health`가 `{"status":"UP"}`로 응답함을 확인했다.
+- `docker compose build backend`로 수정된 Spring Boot backend가 컴파일 및 패키징되는 것을 확인했다.
+- `docker compose up -d backend`로 수정된 backend 이미지를 재기동했다.
+- 재기동 후 backend 로그에서 Tomcat이 HTTPS 8443으로 정상 시작됨을 확인했다.
+- 로컬 환경에는 `mvn` 명령이 없어 Maven 직접 실행은 수행하지 못했다.
+
+#### 남은 작업
+
+- 실제 회원가입 OTP 요청을 다시 수행하고 `docker compose logs -f backend`에서 SMTP 상세 로그 확인
+- Gmail 사용 시 계정의 app password/SMTP 허용 정책 확인
+- `backend/config/dev-ssl.p12`가 로컬 파일이 아니라 디렉터리로 존재하므로, Docker가 아닌 로컬 `mvn spring-boot:run` 실행 전에는 기존 디렉터리를 정리하고 개발용 keystore 파일을 재생성
+
 ### 관리자 신고 관리 및 채팅 아카이브 검토 기능 구현
 
 #### 목적
