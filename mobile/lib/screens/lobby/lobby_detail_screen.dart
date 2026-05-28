@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../../core/enums.dart';
 import '../../core/service_registry.dart';
+import '../../models/cart_item.dart';
 import '../../models/lobby.dart';
 import '../../models/lobby_member.dart';
 import '../../models/user.dart';
+import '../../services/cart_service.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/cart_item_tile.dart';
 import '../../widgets/error_message_view.dart';
 import '../../widgets/loading_view.dart';
+import '../../widgets/payment_record_tile.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/status_card.dart';
+import '../cart/cart_item_form_dialog.dart';
 
-// Phase 6에서는 LobbyCard를 눌렀을 때 이동할 최소 상세 화면만 제공합니다.
-// CartItem 수정/삭제와 결제 처리는 Phase 7, 8에서 이 화면에 이어 붙입니다.
+// Lobby 상세 화면입니다.
+// Phase 7부터 CartItem 추가/수정/삭제와 Cart Lock 진입점을 함께 제공합니다.
 class LobbyDetailScreen extends StatefulWidget {
   const LobbyDetailScreen({super.key});
 
@@ -24,6 +29,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
   Future<_LobbyDetailData>? _detailFuture;
   int? _lobbyId;
   bool _isJoining = false;
+  bool _isLockingCart = false;
 
   @override
   void didChangeDependencies() {
@@ -93,6 +99,146 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
     }
   }
 
+  Future<void> _addCartItem(Lobby lobby) async {
+    final request = await showDialog<CartItemRequest>(
+      context: context,
+      builder: (context) => const CartItemFormDialog(),
+    );
+    if (request == null) {
+      return;
+    }
+
+    try {
+      await AppServices.cartService.addCartItem(lobby.lobbyId, request);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cart item added.')),
+      );
+      _refreshDetail();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
+  Future<void> _editCartItem(Lobby lobby, CartItem item) async {
+    final request = await showDialog<CartItemRequest>(
+      context: context,
+      builder: (context) => CartItemFormDialog(initialItem: item),
+    );
+    if (request == null) {
+      return;
+    }
+
+    try {
+      await AppServices.cartService.updateCartItem(
+        lobby.lobbyId,
+        item.cartItemId,
+        request,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cart item updated.')),
+      );
+      _refreshDetail();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
+  Future<void> _deleteCartItem(Lobby lobby, CartItem item) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete item'),
+          content: Text('Delete ${item.itemName}?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (shouldDelete != true) {
+      return;
+    }
+
+    try {
+      await AppServices.cartService.deleteCartItem(
+        lobby.lobbyId,
+        item.cartItemId,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cart item deleted.')),
+      );
+      _refreshDetail();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
+  Future<void> _lockCart(Lobby lobby) async {
+    setState(() {
+      _isLockingCart = true;
+    });
+
+    try {
+      await AppServices.cartService.lockCart(lobby.lobbyId);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cart locked.')),
+      );
+      _refreshDetail();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLockingCart = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final detailFuture = _detailFuture;
@@ -133,6 +279,16 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
           final joinDisabledReason = showJoinAction && data.isInActiveLobby
               ? 'Already in a lobby'
               : null;
+          final isHost = lobby.hostUserId == data.currentUser.id;
+          final canEditCart = isMember && lobby.canEditCart;
+          final shouldShowLockCart =
+              isHost && lobby.orderStatus == LobbyStatus.waiting;
+          final canLockCart =
+              shouldShowLockCart &&
+              lobby.currentTotalAmount >= lobby.minimumOrderAmount;
+          final lockDisabledReason = shouldShowLockCart && !canLockCart
+              ? 'Minimum order amount has not been reached.'
+              : null;
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -140,6 +296,10 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
               if (isMember)
                 const _MyLobbyBanner(),
               StatusCard(title: 'Restaurant', value: lobby.restaurantName),
+              StatusCard(
+                title: 'Host',
+                value: lobby.hostName ?? 'User ${lobby.hostUserId}',
+              ),
               StatusCard(title: 'Delivery Zone', value: lobby.deliveryZone),
               StatusCard(title: 'Status', value: lobby.orderStatus),
               StatusCard(
@@ -150,6 +310,10 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
               StatusCard(
                 title: 'Remaining Amount',
                 value: '${lobby.remainingAmount}',
+              ),
+              StatusCard(
+                title: 'Delivery Fee',
+                value: '${lobby.deliveryFee}',
               ),
               if (isMember && lobby.unreadCount > 0)
                 StatusCard(
@@ -164,6 +328,58 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
               const SizedBox(height: 8),
               for (final member in lobby.members)
                 _MemberRow(member: member),
+              const SizedBox(height: 16),
+              _SectionHeader(
+                title: 'Cart Items',
+                action: canEditCart
+                    ? OutlinedButton.icon(
+                        onPressed: () => _addCartItem(lobby),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add item'),
+                      )
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              if (lobby.cartItems.isEmpty)
+                const _MutedText('No cart items yet.')
+              else
+                for (final item in lobby.cartItems)
+                  CartItemTile(
+                    itemName: item.itemName,
+                    unitPrice: item.unitPrice,
+                    quantity: item.quantity,
+                    subtotal: item.subtotal,
+                    ownerName: _memberNameById(lobby, item.ownerUserId),
+                    canEdit:
+                        canEditCart && item.isOwnedBy(data.currentUser.id),
+                    onEdit: () => _editCartItem(lobby, item),
+                    onDelete: () => _deleteCartItem(lobby, item),
+                  ),
+              if (isMember && !lobby.canEditCart) ...[
+                const SizedBox(height: 8),
+                const _MutedText('Cart editing is unavailable after lock.'),
+              ],
+              if (shouldShowLockCart) ...[
+                const SizedBox(height: 16),
+                _LockCartAction(
+                  canLock: canLockCart,
+                  disabledReason: lockDisabledReason,
+                  isLoading: _isLockingCart,
+                  onLock: () => _lockCart(lobby),
+                ),
+              ],
+              const SizedBox(height: 16),
+              const _SectionHeader(title: 'Payment Records'),
+              const SizedBox(height: 8),
+              if (lobby.paymentRecords.isEmpty)
+                const _MutedText('Payment records will appear after cart lock.')
+              else
+                for (final record in lobby.paymentRecords)
+                  PaymentRecordTile(
+                    userName: _memberNameById(lobby, record.userId),
+                    amount: record.amount,
+                    status: record.status,
+                  ),
               if (showJoinAction) ...[
                 const SizedBox(height: 16),
                 _JoinLobbyAction(
@@ -194,6 +410,15 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       return false;
     }
     return _isActiveMember(lobby, currentUserId);
+  }
+
+  String _memberNameById(Lobby lobby, int userId) {
+    for (final member in lobby.members) {
+      if (member.userId == userId) {
+        return member.name;
+      }
+    }
+    return 'User $userId';
   }
 }
 
@@ -236,6 +461,89 @@ class _MyLobbyBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+    this.action,
+  });
+
+  final String title;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        if (action != null) action!,
+      ],
+    );
+  }
+}
+
+class _MutedText extends StatelessWidget {
+  const _MutedText(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+      ),
+    );
+  }
+}
+
+class _LockCartAction extends StatelessWidget {
+  const _LockCartAction({
+    required this.canLock,
+    required this.isLoading,
+    required this.onLock,
+    this.disabledReason,
+  });
+
+  final bool canLock;
+  final bool isLoading;
+  final VoidCallback onLock;
+  final String? disabledReason;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PrimaryButton(
+          label: 'Lock Cart',
+          icon: Icons.lock_outline,
+          isLoading: isLoading,
+          onPressed: canLock ? onLock : null,
+        ),
+        if (disabledReason != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            disabledReason!,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+          ),
+        ],
+      ],
     );
   }
 }

@@ -16,6 +16,7 @@ class MockCartService implements CartService {
     CartItemRequest request,
   ) async {
     final lobby = _store.findLobby(lobbyId);
+    _ensureCurrentUserIsActiveMember(lobby);
     _ensureCartEditable(lobby);
 
     final newItem = CartItem(
@@ -53,6 +54,7 @@ class MockCartService implements CartService {
     CartItemRequest request,
   ) async {
     final lobby = _store.findLobby(lobbyId);
+    _ensureCurrentUserIsActiveMember(lobby);
     _ensureCartEditable(lobby);
     if (!lobby.cartItems.any((item) => item.cartItemId == cartItemId)) {
       throw StateError('CartItem not found: $cartItemId');
@@ -96,6 +98,7 @@ class MockCartService implements CartService {
   @override
   Future<DeleteCartItemResult> deleteCartItem(int lobbyId, int cartItemId) async {
     final lobby = _store.findLobby(lobbyId);
+    _ensureCurrentUserIsActiveMember(lobby);
     _ensureCartEditable(lobby);
 
     final targetItem = lobby.cartItems.firstWhere(
@@ -168,6 +171,15 @@ class MockCartService implements CartService {
   void _ensureCurrentUserIsHost(Lobby lobby) {
     if (lobby.hostUserId != _store.currentUser.id) {
       throw StateError('Only the Host can perform this action.');
+    }
+  }
+
+  void _ensureCurrentUserIsActiveMember(Lobby lobby) {
+    final isActiveMember = lobby.members.any(
+      (member) => member.userId == _store.currentUser.id && member.isActive,
+    );
+    if (!isActiveMember) {
+      throw StateError('Only active Lobby members can edit CartItems.');
     }
   }
 
