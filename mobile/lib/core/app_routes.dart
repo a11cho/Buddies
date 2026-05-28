@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/signup_request_screen.dart';
 import '../screens/auth/signup_verify_screen.dart';
+import '../screens/chat/chat_screen.dart';
 import '../screens/lobby/create_lobby_screen.dart';
 import '../screens/lobby/lobby_detail_screen.dart';
 import '../screens/lobby/lobby_list_screen.dart';
@@ -18,6 +19,7 @@ class AppRoutes {
   static const lobbyList = '/lobbies';
   static const createLobby = '/lobbies/create';
   static const lobbyDetail = '/lobbies/detail';
+  static const chat = '/lobbies/chat';
 }
 
 // MaterialApp이 사용할 route table입니다.
@@ -31,5 +33,6 @@ Map<String, WidgetBuilder> buildAppRoutes() {
     AppRoutes.lobbyList: (_) => const LobbyListScreen(),
     AppRoutes.createLobby: (_) => const CreateLobbyScreen(),
     AppRoutes.lobbyDetail: (_) => const LobbyDetailScreen(),
+    AppRoutes.chat: (_) => const ChatScreen(),
   };
 }

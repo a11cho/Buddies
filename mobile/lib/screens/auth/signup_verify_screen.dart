@@ -57,6 +57,14 @@ class _SignupVerifyScreenState extends State<SignupVerifyScreen> {
     );
   }
 
+  void _goToLobbyList() {
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRoutes.lobbyList,
+      (route) => false,
+    );
+  }
+
   Future<void> _submit(String email) async {
     if (email.isEmpty || _otpController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -80,11 +88,7 @@ class _SignupVerifyScreenState extends State<SignupVerifyScreen> {
       if (!mounted) {
         return;
       }
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        AppRoutes.lobbyList,
-        (route) => false,
-      );
+      _goToLobbyList();
     } catch (error) {
       if (!mounted) {
         return;

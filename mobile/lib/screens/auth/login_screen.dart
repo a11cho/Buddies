@@ -70,8 +70,18 @@ class _LoginScreenState extends State<LoginScreen> {
           TextButton(
             onPressed: _isSubmitting
                 ? null
-                : () {
-                    Navigator.pushNamed(context, AppRoutes.signupRequest);
+                : () async {
+                    final shouldClearFields = await Navigator.pushNamed(
+                      context,
+                      AppRoutes.signupRequest,
+                    );
+                    if (!mounted) {
+                      return;
+                    }
+                    if (shouldClearFields == true) {
+                      _emailController.clear();
+                      _passwordController.clear();
+                    }
                   },
             child: const Text('Create account'),
           ),

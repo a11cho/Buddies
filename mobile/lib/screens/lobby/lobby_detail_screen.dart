@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_routes.dart';
 import '../../core/enums.dart';
 import '../../core/service_registry.dart';
 import '../../models/cart_item.dart';
@@ -70,6 +71,18 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
     setState(() {
       _detailFuture = _loadDetail(lobbyId);
     });
+  }
+
+  Future<void> _openChat(Lobby lobby) async {
+    await Navigator.pushNamed(
+      context,
+      AppRoutes.chat,
+      arguments: lobby.lobbyId,
+    );
+    if (!mounted) {
+      return;
+    }
+    _refreshDetail();
   }
 
   Future<void> _joinLobby(Lobby lobby) async {
@@ -457,6 +470,18 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                   title: 'Unread Chat',
                   value: '${lobby.unreadCount}',
                 ),
+              if (isMember) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _openChat(lobby),
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  label: Text(
+                    lobby.unreadCount > 0
+                        ? 'Open Chat (${lobby.unreadCount})'
+                        : 'Open Chat',
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
                 'Members',

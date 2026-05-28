@@ -1,6 +1,7 @@
+import '../core/enums.dart';
 import '../models/chat_history_response.dart';
 import '../models/chat_message.dart';
-import '../core/enums.dart';
+import '../models/lobby.dart';
 import '../services/chat_service.dart';
 import 'mock_data_store.dart';
 
@@ -11,6 +12,8 @@ class MockChatService implements ChatService {
 
   @override
   Future<ChatConnectionInfo> getConnectionInfo(int lobbyId) async {
+    final lobby = _store.findLobby(lobbyId);
+    _ensureCurrentUserIsActiveMember(lobby);
     return ChatConnectionInfo(
       serverUrl: 'ws://localhost:8080/ws',
       subscribeDestination: '/topic/lobbies/$lobbyId/chat',
@@ -22,14 +25,19 @@ class MockChatService implements ChatService {
   @override
   Future<ChatHistoryResponse> getMessages(int lobbyId) async {
     final lobby = _store.findLobby(lobbyId);
+    _ensureCurrentUserIsActiveMember(lobby);
+    final messages = List<ChatMessage>.from(_store.findMessages(lobbyId))
+      ..sort((left, right) => left.id.compareTo(right.id));
     return ChatHistoryResponse(
       lastReadMessageId: lobby.lastReadMessageId,
-      messages: List<ChatMessage>.from(_store.findMessages(lobbyId)),
+      messages: messages,
     );
   }
 
   @override
   Future<ChatMessage> sendMessage(int lobbyId, String content) async {
+    final lobby = _store.findLobby(lobbyId);
+    _ensureCurrentUserIsActiveMember(lobby);
     if (content.trim().isEmpty) {
       throw StateError('Message content is required.');
     }
@@ -50,9 +58,13 @@ class MockChatService implements ChatService {
   @override
   Future<void> markAsRead(int lobbyId, int messageId) async {
     final lobby = _store.findLobby(lobbyId);
+    _ensureCurrentUserIsActiveMember(lobby);
     final messages = _store.findMessages(lobbyId);
-    final unreadCount =
-        messages.where((message) => message.id > messageId).length;
+    final nextLastReadMessageId =
+        _maxReadMessageId(lobby.lastReadMessageId, messageId);
+    final unreadCount = messages
+        .where((message) => message.id > nextLastReadMessageId)
+        .length;
     final readAt = DateTime.now();
 
     final updatedMembers = lobby.members.map((member) {
@@ -60,17 +72,38 @@ class MockChatService implements ChatService {
         return member;
       }
       return member.copyWith(
-        lastReadMessageId: messageId,
+        lastReadMessageId: nextLastReadMessageId,
         lastReadAt: readAt,
       );
     }).toList();
 
     _store.replaceLobby(
       lobby.copyWith(
-        lastReadMessageId: messageId,
+        lastReadMessageId: nextLastReadMessageId,
         unreadCount: unreadCount,
         members: updatedMembers,
       ),
     );
+  }
+
+  void _ensureCurrentUserIsActiveMember(Lobby lobby) {
+    final isActiveLobby = lobby.orderStatus != LobbyStatus.closed &&
+        lobby.orderStatus != LobbyStatus.canceled;
+    if (!isActiveLobby) {
+      throw StateError('Chat is only available in active Lobbies.');
+    }
+    final isActiveMember = lobby.members.any(
+      (member) => member.userId == _store.currentUser.id && member.isActive,
+    );
+    if (!isActiveMember) {
+      throw StateError('Only active Lobby members can use Chat.');
+    }
+  }
+
+  int _maxReadMessageId(int? currentMessageId, int nextMessageId) {
+    if (currentMessageId == null) {
+      return nextMessageId;
+    }
+    return currentMessageId > nextMessageId ? currentMessageId : nextMessageId;
   }
 }

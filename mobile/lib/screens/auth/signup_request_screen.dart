@@ -105,10 +105,12 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
       if (!mounted) {
         return;
       }
-      Navigator.pushNamed(
+      // OTP를 보낸 뒤에는 이 화면으로 돌아와서 OTP를 다시 보낼 수 없게 교체 이동합니다.
+      Navigator.pushReplacementNamed(
         context,
         AppRoutes.signupVerify,
         arguments: request.email,
+        result: true,
       );
     } catch (error) {
       if (!mounted) {

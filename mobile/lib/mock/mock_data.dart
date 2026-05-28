@@ -268,6 +268,22 @@ Map<int, List<ChatMessage>> createInitialMockMessages() {
   return {
     10: [
       ChatMessage(
+        id: 1049,
+        lobbyId: 10,
+        senderUserId: 3,
+        messageType: ChatMessageType.user,
+        content: 'I can host this order.',
+        createdAt: DateTime(2026, 5, 7, 5, 8),
+      ),
+      ChatMessage(
+        id: 1050,
+        lobbyId: 10,
+        senderUserId: 4,
+        messageType: ChatMessageType.media,
+        mediaUrl: 'https://example.com/moms-touch-menu.png',
+        createdAt: DateTime(2026, 5, 7, 5, 9),
+      ),
+      ChatMessage(
         id: 1051,
         lobbyId: 10,
         senderUserId: 7,
