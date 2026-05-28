@@ -4,6 +4,7 @@ import '../screens/auth/login_screen.dart';
 import '../screens/auth/signup_request_screen.dart';
 import '../screens/auth/signup_verify_screen.dart';
 import '../screens/lobby/create_lobby_screen.dart';
+import '../screens/lobby/lobby_detail_screen.dart';
 import '../screens/lobby/lobby_list_screen.dart';
 
 // 화면 이동에 사용하는 route 이름을 한 곳에서 관리합니다.
@@ -16,6 +17,7 @@ class AppRoutes {
   static const signupVerify = '/signup/verify';
   static const lobbyList = '/lobbies';
   static const createLobby = '/lobbies/create';
+  static const lobbyDetail = '/lobbies/detail';
 }
 
 // MaterialApp이 사용할 route table입니다.
@@ -28,5 +30,6 @@ Map<String, WidgetBuilder> buildAppRoutes() {
     AppRoutes.signupVerify: (_) => const SignupVerifyScreen(),
     AppRoutes.lobbyList: (_) => const LobbyListScreen(),
     AppRoutes.createLobby: (_) => const CreateLobbyScreen(),
+    AppRoutes.lobbyDetail: (_) => const LobbyDetailScreen(),
   };
 }

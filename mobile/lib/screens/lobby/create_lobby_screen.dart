@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/enums.dart';
 import '../../core/service_registry.dart';
 import '../../services/lobby_service.dart';
 import '../../widgets/app_scaffold.dart';
@@ -18,16 +19,15 @@ class CreateLobbyScreen extends StatefulWidget {
 class _CreateLobbyScreenState extends State<CreateLobbyScreen> {
   final TextEditingController _restaurantNameController =
       TextEditingController();
-  final TextEditingController _deliveryZoneController = TextEditingController();
   final TextEditingController _minimumOrderAmountController =
       TextEditingController();
   final TextEditingController _deliveryFeeController = TextEditingController();
+  String _selectedDeliveryZone = DeliveryZone.n3;
   bool _isSubmitting = false;
 
   @override
   void dispose() {
     _restaurantNameController.dispose();
-    _deliveryZoneController.dispose();
     _minimumOrderAmountController.dispose();
     _deliveryFeeController.dispose();
     super.dispose();
@@ -46,11 +46,28 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen> {
             prefixIcon: Icons.restaurant_outlined,
           ),
           const SizedBox(height: 12),
-          TextInputField(
-            controller: _deliveryZoneController,
-            label: 'Delivery Zone',
-            hintText: 'N3',
-            prefixIcon: Icons.place_outlined,
+          DropdownButtonFormField<String>(
+            initialValue: _selectedDeliveryZone,
+            decoration: const InputDecoration(
+              labelText: 'Delivery Zone',
+              prefixIcon: Icon(Icons.place_outlined),
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final zone in DeliveryZone.values)
+                DropdownMenuItem(
+                  value: zone,
+                  child: Text(zone),
+                ),
+            ],
+            onChanged: (value) {
+              if (value == null) {
+                return;
+              }
+              setState(() {
+                _selectedDeliveryZone = value;
+              });
+            },
           ),
           const SizedBox(height: 12),
           TextInputField(
@@ -85,7 +102,6 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen> {
     final deliveryFee = int.tryParse(_deliveryFeeController.text.trim());
 
     if (_restaurantNameController.text.trim().isEmpty ||
-        _deliveryZoneController.text.trim().isEmpty ||
         minimumOrderAmount == null ||
         minimumOrderAmount < 0 ||
         deliveryFee == null ||
@@ -104,7 +120,7 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen> {
       await AppServices.lobbyService.createLobby(
         CreateLobbyRequest(
           restaurantName: _restaurantNameController.text.trim(),
-          deliveryZone: _deliveryZoneController.text.trim(),
+          deliveryZone: _selectedDeliveryZone,
           minimumOrderAmount: minimumOrderAmount,
           deliveryFee: deliveryFee,
         ),

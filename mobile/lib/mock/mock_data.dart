@@ -22,11 +22,11 @@ List<Lobby> createInitialMockLobbies() {
   return [
     Lobby(
       lobbyId: 10,
-      hostUserId: 3,
-      hostName: 'Junsu',
-      hostTrustScore: 4.6,
+      hostUserId: 4,
+      hostName: 'Doyun',
+      hostTrustScore: 4.5,
       restaurantName: 'MOM\'S TOUCH',
-      deliveryZone: 'N3',
+      deliveryZone: DeliveryZone.n3,
       minimumOrderAmount: 23000,
       currentTotalAmount: 16000,
       remainingAmount: 7000,
@@ -37,8 +37,8 @@ List<Lobby> createInitialMockLobbies() {
       unreadCount: 3,
       members: const [
         LobbyMember(
-          userId: 3,
-          name: 'Junsu',
+          userId: 4,
+          name: 'Doyun',
           roleInLobby: RoleInLobby.host,
           membershipStatus: MembershipStatus.active,
           lastReadMessageId: 1052,
@@ -64,7 +64,7 @@ List<Lobby> createInitialMockLobbies() {
         CartItem(
           cartItemId: 102,
           lobbyId: 10,
-          ownerUserId: 3,
+          ownerUserId: 4,
           itemName: 'Coke',
           unitPrice: 2000,
           quantity: 1,
@@ -79,7 +79,7 @@ List<Lobby> createInitialMockLobbies() {
       hostName: 'Mina',
       hostTrustScore: 4.9,
       restaurantName: 'Pizza School',
-      deliveryZone: 'N2',
+      deliveryZone: DeliveryZone.n2,
       minimumOrderAmount: 30000,
       currentTotalAmount: 31000,
       remainingAmount: 0,
@@ -98,8 +98,8 @@ List<Lobby> createInitialMockLobbies() {
           lastReadMessageId: 1050,
         ),
         LobbyMember(
-          userId: 3,
-          name: 'Junsu',
+          userId: 6,
+          name: 'Kai',
           roleInLobby: RoleInLobby.participant,
           membershipStatus: MembershipStatus.active,
           lastReadMessageId: 1050,
@@ -125,7 +125,7 @@ List<Lobby> createInitialMockLobbies() {
         PaymentRecord(
           paymentRecordId: 202,
           lobbyId: 11,
-          userId: 3,
+          userId: 6,
           amount: 10000,
           status: PaymentStatus.unpaid,
         ),
@@ -137,6 +137,32 @@ List<Lobby> createInitialMockLobbies() {
           status: PaymentStatus.unpaid,
         ),
       ],
+    ),
+    Lobby(
+      lobbyId: 12,
+      hostUserId: 9,
+      hostName: 'Sora',
+      hostTrustScore: 4.7,
+      restaurantName: 'Subway',
+      deliveryZone: DeliveryZone.west,
+      minimumOrderAmount: 25000,
+      currentTotalAmount: 12000,
+      remainingAmount: 13000,
+      deliveryFee: 3500,
+      participantCount: 1,
+      orderStatus: LobbyStatus.waiting,
+      lastReadMessageId: null,
+      unreadCount: 0,
+      members: const [
+        LobbyMember(
+          userId: 9,
+          name: 'Sora',
+          roleInLobby: RoleInLobby.host,
+          membershipStatus: MembershipStatus.active,
+        ),
+      ],
+      cartItems: const [],
+      paymentRecords: const [],
     ),
   ];
 }

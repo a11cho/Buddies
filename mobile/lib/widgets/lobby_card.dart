@@ -12,9 +12,12 @@ class LobbyCard extends StatelessWidget {
     required this.participantCount,
     required this.orderStatus,
     this.unreadCount = 0,
+    this.isMyLobby = false,
     this.onTap,
     this.onJoin,
     this.canJoin = false,
+    this.showJoinAction = false,
+    this.joinDisabledReason,
     super.key,
   });
 
@@ -26,9 +29,12 @@ class LobbyCard extends StatelessWidget {
   final int participantCount;
   final String orderStatus;
   final int unreadCount;
+  final bool isMyLobby;
   final VoidCallback? onTap;
   final VoidCallback? onJoin;
   final bool canJoin;
+  final bool showJoinAction;
+  final String? joinDisabledReason;
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +72,8 @@ class LobbyCard extends StatelessWidget {
                 spacing: 12,
                 runSpacing: 8,
                 children: [
+                  if (isMyLobby)
+                    const _MyLobbyBadge(),
                   _InfoLabel(icon: Icons.place_outlined, label: deliveryZone),
                   _InfoLabel(
                     icon: Icons.group_outlined,
@@ -84,19 +92,73 @@ class LobbyCard extends StatelessWidget {
                 'Remaining $remainingAmount',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              if (onJoin != null) ...[
+              if (showJoinAction) ...[
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: OutlinedButton.icon(
-                    onPressed: canJoin ? onJoin : null,
-                    icon: const Icon(Icons.login),
-                    label: const Text('Join'),
+                  child: Tooltip(
+                    message: joinDisabledReason ?? 'Join this lobby',
+                    child: Opacity(
+                      opacity: canJoin ? 1 : 0.55,
+                      child: OutlinedButton.icon(
+                        onPressed: canJoin ? onJoin : null,
+                        icon: Icon(
+                          canJoin ? Icons.login : Icons.block,
+                        ),
+                        label: Text(canJoin ? 'Join' : 'Unavailable'),
+                      ),
+                    ),
                   ),
                 ),
+                if (!canJoin && joinDisabledReason != null) ...[
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      joinDisabledReason!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                    ),
+                  ),
+                ],
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MyLobbyBadge extends StatelessWidget {
+  const _MyLobbyBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.check_circle_outline,
+              size: 16,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'My Lobby',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+            ),
+          ],
         ),
       ),
     );

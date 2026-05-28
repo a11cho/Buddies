@@ -40,6 +40,24 @@ class LobbyStatus {
   static const canceled = 'CANCELED';
 }
 
+// 배달 위치 후보입니다.
+// 서버와 주고받는 JSON field 이름은 deliveryZone이고, 값은 아래 문자열 중 하나입니다.
+class DeliveryZone {
+  const DeliveryZone._();
+
+  static const n3 = 'N3';
+  static const n2 = 'N2';
+  static const north = 'NORTH';
+  static const west = 'WEST';
+
+  static const values = [
+    n3,
+    n2,
+    north,
+    west,
+  ];
+}
+
 // PaymentRecord 상태입니다.
 // Cart Lock 이후 송금 확인 UI에서 사용합니다.
 class PaymentStatus {

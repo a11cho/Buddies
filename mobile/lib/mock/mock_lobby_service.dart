@@ -15,8 +15,8 @@ class MockLobbyService implements LobbyService {
     String? restaurantName,
   }) async {
     return _store.lobbies.where((lobby) {
-      final matchesDeliveryZone =
-          deliveryZone == null || lobby.deliveryZone == deliveryZone;
+      final matchesDeliveryZone = deliveryZone == null ||
+          lobby.deliveryZone.toLowerCase() == deliveryZone.toLowerCase();
       final matchesRestaurantName = restaurantName == null ||
           lobby.restaurantName
               .toLowerCase()
@@ -32,6 +32,12 @@ class MockLobbyService implements LobbyService {
 
   @override
   Future<Lobby> createLobby(CreateLobbyRequest request) async {
+    if (_store.lobbies.any(_isCurrentUserInActiveLobby)) {
+      throw StateError(
+        'You cannot create a Lobby while you are in an active Lobby.',
+      );
+    }
+
     final newLobby = Lobby(
       lobbyId: _store.nextLobbyId++,
       hostUserId: _store.currentUser.id,
@@ -75,6 +81,12 @@ class MockLobbyService implements LobbyService {
       return existingMember.first;
     }
 
+    if (_store.lobbies.any(_isCurrentUserInActiveLobby)) {
+      throw StateError(
+        'You cannot join another Lobby while you are in an active Lobby.',
+      );
+    }
+
     final newMember = LobbyMember(
       userId: _store.currentUser.id,
       name: _store.currentUser.name,
@@ -91,6 +103,17 @@ class MockLobbyService implements LobbyService {
       ),
     );
     return newMember;
+  }
+
+  bool _isCurrentUserInActiveLobby(Lobby lobby) {
+    final isActiveStatus = lobby.orderStatus != LobbyStatus.closed &&
+        lobby.orderStatus != LobbyStatus.canceled;
+    if (!isActiveStatus) {
+      return false;
+    }
+    return lobby.members.any(
+      (member) => member.userId == _store.currentUser.id && member.isActive,
+    );
   }
 
   @override
