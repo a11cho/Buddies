@@ -76,7 +76,7 @@ public class AuthService {
 
         String otp = createOtp();
         String passwordHash = passwordEncoder.encode(password);
-        String otpHash = passwordEncoder.encode(sha256Hex(otp));
+        String otpHash = passwordEncoder.encode(otp);
         Instant otpExpiresAt = now.plus(OTP_TTL);
         Instant resendAvailableAt = now.plus(RESEND_COOLDOWN);
 
@@ -104,8 +104,8 @@ public class AuthService {
         if (pendingSignup.getAttemptCount() >= MAX_OTP_ATTEMPTS) {
             throw new AuthException(HttpStatus.TOO_MANY_REQUESTS, "인증 시도 횟수를 초과했습니다. 인증 코드를 다시 요청해주세요.");
         }
-        String otpDigest = normalizeOtpDigest(otp);
-        if (otpDigest == null || !passwordEncoder.matches(otpDigest, pendingSignup.getOtpHash())) {
+        String normalizedOtp = normalizeOtp(otp);
+        if (normalizedOtp == null || !passwordEncoder.matches(normalizedOtp, pendingSignup.getOtpHash())) {
             pendingSignup.increaseAttemptCount();
             throw new AuthException(HttpStatus.BAD_REQUEST, "인증 코드가 올바르지 않습니다.");
         }
@@ -133,7 +133,7 @@ public class AuthService {
         pendingSignup.replaceOtp(
             pendingSignup.getName(),
             pendingSignup.getPasswordHash(),
-            passwordEncoder.encode(sha256Hex(otp)),
+            passwordEncoder.encode(otp),
             now.plus(OTP_TTL),
             now.plus(RESEND_COOLDOWN)
         );
@@ -281,12 +281,12 @@ public class AuthService {
         }
     }
 
-    private String normalizeOtpDigest(String otpDigest) {
-        if (otpDigest == null) {
+    private String normalizeOtp(String otp) {
+        if (otp == null) {
             return null;
         }
-        String normalized = otpDigest.trim().toLowerCase();
-        if (!normalized.matches("[0-9a-f]{64}")) {
+        String normalized = otp.trim();
+        if (!normalized.matches("\\d{6}")) {
             return null;
         }
         return normalized;

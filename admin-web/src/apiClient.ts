@@ -194,7 +194,7 @@ export class ApiClient {
   async verifySignup(email: string, otp: string): Promise<MessageResponse> {
     return this.request<MessageResponse>('/auth/signup/verify', {
       method: 'POST',
-      body: { email, otp: await sha256Hex(otp) },
+      body: { email, otp },
     });
   }
 

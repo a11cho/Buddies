@@ -40,7 +40,7 @@ class BuddiesApiClient {
     await _requestJson(
       '/auth/signup/verify',
       method: 'POST',
-      body: {'email': email, 'otp': sha256Hex(otp)},
+      body: {'email': email, 'otp': otp},
     );
   }
 
