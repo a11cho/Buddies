@@ -8,6 +8,18 @@ RUN mvn -q -DskipTests package
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/target/buddies-backend-0.1.0-SNAPSHOT.jar app.jar
-EXPOSE 8080
+RUN mkdir -p /app/ssl && \
+    keytool -genkeypair \
+      -alias buddies-local \
+      -keyalg RSA \
+      -keysize 2048 \
+      -storetype PKCS12 \
+      -keystore /app/ssl/dev-ssl.p12 \
+      -storepass buddies-local-ssl \
+      -keypass buddies-local-ssl \
+      -validity 3650 \
+      -dname "CN=localhost, OU=Development, O=Buddies, L=Daejeon, ST=Daejeon, C=KR" \
+      -ext "SAN=dns:localhost,ip:127.0.0.1"
+EXPOSE 8443
 ENTRYPOINT ["java", "-jar", "app.jar"]
 

@@ -59,6 +59,11 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
+    public User(String email, String name, String passwordHash, UserRole role) {
+        this(email, name, passwordHash);
+        this.role = role;
+    }
+
     public Long getId() {
         return id;
     }
@@ -117,6 +122,11 @@ public class User {
 
     public void updatePasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+        this.updatedAt = Instant.now();
+    }
+
+    public void updateRole(UserRole role) {
+        this.role = role;
         this.updatedAt = Instant.now();
     }
 }

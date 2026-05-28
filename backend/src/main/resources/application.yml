@@ -22,7 +22,13 @@ spring:
           writetimeout: ${BUDDIES_MAIL_WRITE_TIMEOUT_MS:5000}
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8443}
+  ssl:
+    enabled: ${SERVER_SSL_ENABLED:true}
+    key-store: ${SERVER_SSL_KEY_STORE:./config/dev-ssl.p12}
+    key-store-type: ${SERVER_SSL_KEY_STORE_TYPE:PKCS12}
+    key-store-password: ${SERVER_SSL_KEY_STORE_PASSWORD:buddies-local-ssl}
+    key-alias: ${SERVER_SSL_KEY_ALIAS:buddies-local}
 
 management:
   endpoints:
@@ -34,10 +40,16 @@ buddies:
   jwt:
     secret: ${BUDDIES_JWT_SECRET:change-this-development-secret-change-this}
   cors:
-    allowed-origins: ${BUDDIES_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    allowed-origins: ${BUDDIES_CORS_ALLOWED_ORIGINS:http://localhost:5173,https://localhost:5173}
   mail:
     from: ${BUDDIES_MAIL_FROM:no-reply@buddies.local}
     signup-subject: ${BUDDIES_MAIL_SIGNUP_SUBJECT:Buddies 인증 코드}
     password-reset-subject: ${BUDDIES_MAIL_PASSWORD_RESET_SUBJECT:Buddies 비밀번호 재설정}
   password-reset:
-    url-template: ${BUDDIES_PASSWORD_RESET_URL_TEMPLATE:http://localhost:8080/password-reset?token=%s}
+    url-template: ${BUDDIES_PASSWORD_RESET_URL_TEMPLATE:https://localhost:8443/password-reset?token=%s}
+  admin:
+    bootstrap:
+      enabled: ${BUDDIES_ADMIN_BOOTSTRAP_ENABLED:true}
+      email: ${BUDDIES_ADMIN_BOOTSTRAP_EMAIL:allcho@kaist.ac.kr}
+      name: ${BUDDIES_ADMIN_BOOTSTRAP_NAME:Buddies Admin}
+      password: ${BUDDIES_ADMIN_BOOTSTRAP_PASSWORD:Admin123!}

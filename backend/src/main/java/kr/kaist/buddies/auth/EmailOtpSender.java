@@ -1,5 +1,7 @@
 package kr.kaist.buddies.auth;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -10,6 +12,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class EmailOtpSender {
+    private static final Logger log = LoggerFactory.getLogger(EmailOtpSender.class);
+
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
     private final String from;
     private final String signupSubject;
@@ -52,6 +56,7 @@ public class EmailOtpSender {
         try {
             mailSender.send(message);
         } catch (MailException exception) {
+            log.warn("Failed to send signup OTP email to {}", email, exception);
             throw new AuthException(HttpStatus.INTERNAL_SERVER_ERROR, "인증 코드 이메일 발송에 실패했습니다.");
         }
     }
@@ -80,6 +85,7 @@ public class EmailOtpSender {
         try {
             mailSender.send(message);
         } catch (MailException exception) {
+            log.warn("Failed to send password reset email to {}", email, exception);
             throw new AuthException(HttpStatus.INTERNAL_SERVER_ERROR, "비밀번호 재설정 이메일 발송에 실패했습니다.");
         }
     }

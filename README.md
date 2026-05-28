@@ -29,8 +29,12 @@ docker compose up --build
 Backend health check:
 
 ```bash
-curl http://localhost:8080/actuator/health
+curl -k https://localhost:8443/actuator/health
 ```
+
+The Docker backend image generates a local self-signed PKCS12 keystore at `/app/ssl/dev-ssl.p12` during image build.
+
+If the backend fails with `Could not load store from '/app/config/dev-ssl.p12'` and `Is a directory`, an older container/configuration is still running. Rebuild and recreate the backend container with `docker compose up --build --force-recreate`.
 
 PostgreSQL:
 

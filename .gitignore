@@ -25,6 +25,7 @@ mobile/coverage/
 .env.*
 !.env.example
 backend/config/mail-secrets.yml
+backend/config/dev-ssl.p12
 *.log
 .DS_Store
 Thumbs.db
