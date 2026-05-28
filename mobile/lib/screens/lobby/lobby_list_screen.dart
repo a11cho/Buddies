@@ -54,8 +54,13 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
     final isInActiveLobby = allLobbies.any(
       (lobby) => _isCurrentUserInActiveLobby(lobby, currentUser.id),
     );
+    final visibleLobbies = _buildVisibleLobbies(
+      allLobbies: allLobbies,
+      filteredLobbies: lobbies,
+      currentUserId: currentUser.id,
+    );
     return _LobbyListData(
-      lobbies: lobbies,
+      lobbies: visibleLobbies,
       currentUser: currentUser,
       isInActiveLobby: isInActiveLobby,
     );
@@ -87,6 +92,40 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
     return lobby.members.any(
       (member) => member.userId == currentUserId && member.isActive,
     );
+  }
+
+  List<Lobby> _buildVisibleLobbies({
+    required List<Lobby> allLobbies,
+    required List<Lobby> filteredLobbies,
+    required int currentUserId,
+  }) {
+    Lobby? currentUserLobby;
+    for (final lobby in allLobbies) {
+      if (_isCurrentUserInActiveLobby(lobby, currentUserId)) {
+        currentUserLobby = lobby;
+        break;
+      }
+    }
+
+    // Lobby list는 참가 가능한 WAITING Lobby가 기본이고,
+    // 내가 이미 참여 중인 active Lobby만 예외적으로 최상단에 유지합니다.
+    final visibleLobbies = filteredLobbies.where((lobby) {
+      final isMyActiveLobby = lobby.lobbyId == currentUserLobby?.lobbyId;
+      final isOpenLobby = lobby.orderStatus == LobbyStatus.waiting;
+      return isMyActiveLobby || isOpenLobby;
+    }).toList();
+
+    if (currentUserLobby == null) {
+      return visibleLobbies;
+    }
+
+    final otherLobbies = visibleLobbies
+        .where((lobby) => lobby.lobbyId != currentUserLobby!.lobbyId)
+        .toList();
+    return [
+      currentUserLobby,
+      ...otherLobbies,
+    ];
   }
 
   Future<void> _openLobbyDetail(int lobbyId) async {

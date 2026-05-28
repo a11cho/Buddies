@@ -38,5 +38,7 @@ abstract class LobbyService {
 
   Future<void> leaveLobby(int lobbyId);
 
+  Future<Lobby> kickMember(int lobbyId, int userId);
+
   Future<Lobby> updateLobbyStatus(int lobbyId, String newStatus);
 }

@@ -1,4 +1,5 @@
 import '../core/enums.dart';
+import '../models/cart_item.dart';
 import '../models/lobby.dart';
 import '../models/lobby_member.dart';
 import '../services/lobby_service.dart';
@@ -138,6 +139,59 @@ class MockLobbyService implements LobbyService {
   }
 
   @override
+  Future<Lobby> kickMember(int lobbyId, int userId) async {
+    final lobby = _store.findLobby(lobbyId);
+    if (lobby.hostUserId != _store.currentUser.id) {
+      throw StateError('Only the Host can kick Participants.');
+    }
+    if (lobby.orderStatus != LobbyStatus.waiting) {
+      throw StateError('Participants can only be kicked while WAITING.');
+    }
+    if (userId == lobby.hostUserId) {
+      throw StateError('The Host cannot be kicked.');
+    }
+
+    final targetMember = lobby.members.firstWhere(
+      (member) => member.userId == userId,
+      orElse: () => throw StateError('Lobby member not found: $userId'),
+    );
+    if (!targetMember.isActive) {
+      throw StateError('Only active Participants can be kicked.');
+    }
+    if (targetMember.isHost) {
+      throw StateError('Only Participants can be kicked.');
+    }
+
+    final kickedAt = DateTime.now();
+    final updatedMembers = lobby.members.map((member) {
+      if (member.userId != userId) {
+        return member;
+      }
+      return member.copyWith(
+        membershipStatus: MembershipStatus.kicked,
+        leftAt: kickedAt,
+      );
+    }).toList();
+    final updatedItems = lobby.cartItems
+        .where((item) => item.ownerUserId != userId)
+        .toList();
+    final updatedTotal = _calculateCurrentTotal(updatedItems);
+    final updatedLobby = lobby.copyWith(
+      members: updatedMembers,
+      cartItems: updatedItems,
+      currentTotalAmount: updatedTotal,
+      remainingAmount: _calculateRemaining(
+        lobby.minimumOrderAmount,
+        updatedTotal,
+      ),
+      participantCount:
+          updatedMembers.where((member) => member.isActive).length,
+    );
+    _store.replaceLobby(updatedLobby);
+    return updatedLobby;
+  }
+
+  @override
   Future<Lobby> updateLobbyStatus(int lobbyId, String newStatus) async {
     final lobby = _store.findLobby(lobbyId);
     if (lobby.hostUserId != _store.currentUser.id) {
@@ -145,6 +199,9 @@ class MockLobbyService implements LobbyService {
     }
     if (!_canTransition(lobby.orderStatus, newStatus)) {
       throw StateError('Invalid Lobby status transition.');
+    }
+    if (newStatus == LobbyStatus.orderPlaced && !lobby.allPaymentsPaid) {
+      throw StateError('All payment records must be PAID before order placed.');
     }
     final updatedLobby = lobby.copyWith(orderStatus: newStatus);
     _store.replaceLobby(updatedLobby);
@@ -160,5 +217,14 @@ class MockLobbyService implements LobbyService {
     };
 
     return allowedTransitions[currentStatus] == newStatus;
+  }
+
+  int _calculateCurrentTotal(List<CartItem> items) {
+    return items.fold(0, (sum, item) => sum + item.subtotal);
+  }
+
+  int _calculateRemaining(int minimumOrderAmount, int currentTotalAmount) {
+    final remaining = minimumOrderAmount - currentTotalAmount;
+    return remaining > 0 ? remaining : 0;
   }
 }

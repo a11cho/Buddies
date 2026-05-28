@@ -17,7 +17,7 @@ import '../../widgets/status_card.dart';
 import '../cart/cart_item_form_dialog.dart';
 
 // Lobby 상세 화면입니다.
-// Phase 7부터 CartItem 추가/수정/삭제와 Cart Lock 진입점을 함께 제공합니다.
+// CartItem 편집, Cart Lock, 결제 확인, Lobby 상태 전환을 함께 제공합니다.
 class LobbyDetailScreen extends StatefulWidget {
   const LobbyDetailScreen({super.key});
 
@@ -30,6 +30,9 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
   int? _lobbyId;
   bool _isJoining = false;
   bool _isLockingCart = false;
+  bool _isUpdatingStatus = false;
+  int? _confirmingPaymentRecordId;
+  int? _kickingUserId;
 
   @override
   void didChangeDependencies() {
@@ -239,6 +242,137 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
     }
   }
 
+  Future<void> _kickMember(Lobby lobby, LobbyMember member) async {
+    final shouldKick = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Kick participant'),
+          content: Text(
+            'Kick ${member.name}? Their cart items will be removed.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Kick'),
+            ),
+          ],
+        );
+      },
+    );
+    if (shouldKick != true) {
+      return;
+    }
+
+    setState(() {
+      _kickingUserId = member.userId;
+    });
+
+    try {
+      await AppServices.lobbyService.kickMember(lobby.lobbyId, member.userId);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${member.name} was kicked.')),
+      );
+      _refreshDetail();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _kickingUserId = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _confirmPaymentRecord(Lobby lobby, int paymentRecordId) async {
+    setState(() {
+      _confirmingPaymentRecordId = paymentRecordId;
+    });
+
+    try {
+      final result = await AppServices.paymentService.confirmPaymentRecord(
+        lobby.lobbyId,
+        paymentRecordId,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.allPaymentsPaid
+                ? 'Payment confirmed. All payments are paid.'
+                : 'Payment confirmed.',
+          ),
+        ),
+      );
+      _refreshDetail();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _confirmingPaymentRecordId = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _updateLobbyStatus(Lobby lobby, String newStatus) async {
+    setState(() {
+      _isUpdatingStatus = true;
+    });
+
+    try {
+      await AppServices.lobbyService.updateLobbyStatus(
+        lobby.lobbyId,
+        newStatus,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lobby status changed to $newStatus.')),
+      );
+      _refreshDetail();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingStatus = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final detailFuture = _detailFuture;
@@ -283,12 +417,15 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
           final canEditCart = isMember && lobby.canEditCart;
           final shouldShowLockCart =
               isHost && lobby.orderStatus == LobbyStatus.waiting;
+          final canKickMembers =
+              isHost && lobby.orderStatus == LobbyStatus.waiting;
           final canLockCart =
               shouldShowLockCart &&
               lobby.currentTotalAmount >= lobby.minimumOrderAmount;
           final lockDisabledReason = shouldShowLockCart && !canLockCart
               ? 'Minimum order amount has not been reached.'
               : null;
+          final statusAction = _statusActionFor(lobby);
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -327,7 +464,15 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
               ),
               const SizedBox(height: 8),
               for (final member in lobby.members)
-                _MemberRow(member: member),
+                _MemberRow(
+                  member: member,
+                  canKick: canKickMembers &&
+                      member.isActive &&
+                      !member.isHost &&
+                      _kickingUserId == null,
+                  isKicking: _kickingUserId == member.userId,
+                  onKick: () => _kickMember(lobby, member),
+                ),
               const SizedBox(height: 16),
               _SectionHeader(
                 title: 'Cart Items',
@@ -379,7 +524,26 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                     userName: _memberNameById(lobby, record.userId),
                     amount: record.amount,
                     status: record.status,
+                    canConfirm: isHost &&
+                        lobby.orderStatus == LobbyStatus.locked &&
+                        !record.isPaid &&
+                        _confirmingPaymentRecordId == null,
+                    onConfirm: () => _confirmPaymentRecord(
+                      lobby,
+                      record.paymentRecordId,
+                    ),
                   ),
+              if (isHost && statusAction != null) ...[
+                const SizedBox(height: 16),
+                _LobbyStatusAction(
+                  action: statusAction,
+                  isLoading: _isUpdatingStatus,
+                  onPressed: () => _updateLobbyStatus(
+                    lobby,
+                    statusAction.nextStatus,
+                  ),
+                ),
+              ],
               if (showJoinAction) ...[
                 const SizedBox(height: 16),
                 _JoinLobbyAction(
@@ -419,6 +583,43 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       }
     }
     return 'User $userId';
+  }
+
+  _LobbyStatusActionData? _statusActionFor(Lobby lobby) {
+    switch (lobby.orderStatus) {
+      case LobbyStatus.locked:
+        return _LobbyStatusActionData(
+          label: 'Mark as Order Placed',
+          icon: Icons.receipt_long_outlined,
+          nextStatus: LobbyStatus.orderPlaced,
+          enabled: lobby.allPaymentsPaid,
+          disabledReason: lobby.allPaymentsPaid
+              ? null
+              : 'All payment records must be PAID first.',
+        );
+      case LobbyStatus.orderPlaced:
+        return const _LobbyStatusActionData(
+          label: 'Mark as Out for Delivery',
+          icon: Icons.delivery_dining_outlined,
+          nextStatus: LobbyStatus.outForDelivery,
+          enabled: true,
+        );
+      case LobbyStatus.outForDelivery:
+        return const _LobbyStatusActionData(
+          label: 'Mark as Delivered',
+          icon: Icons.check_circle_outline,
+          nextStatus: LobbyStatus.delivered,
+          enabled: true,
+        );
+      case LobbyStatus.delivered:
+        return const _LobbyStatusActionData(
+          label: 'Close Lobby',
+          icon: Icons.done_all_outlined,
+          nextStatus: LobbyStatus.closed,
+          enabled: true,
+        );
+    }
+    return null;
   }
 }
 
@@ -548,6 +749,66 @@ class _LockCartAction extends StatelessWidget {
   }
 }
 
+class _LobbyStatusActionData {
+  const _LobbyStatusActionData({
+    required this.label,
+    required this.icon,
+    required this.nextStatus,
+    required this.enabled,
+    this.disabledReason,
+  });
+
+  final String label;
+  final IconData icon;
+  final String nextStatus;
+  final bool enabled;
+  final String? disabledReason;
+}
+
+class _LobbyStatusAction extends StatelessWidget {
+  const _LobbyStatusAction({
+    required this.action,
+    required this.isLoading,
+    required this.onPressed,
+  });
+
+  final _LobbyStatusActionData action;
+  final bool isLoading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveOnPressed = action.enabled && !isLoading ? onPressed : null;
+    final child = isLoading
+        ? const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Text(action.label);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          onPressed: effectiveOnPressed,
+          icon: Icon(action.icon),
+          label: child,
+        ),
+        if (!action.enabled && action.disabledReason != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            action.disabledReason!,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _JoinLobbyAction extends StatelessWidget {
   const _JoinLobbyAction({
     required this.canJoin,
@@ -599,18 +860,41 @@ class _JoinLobbyAction extends StatelessWidget {
 }
 
 class _MemberRow extends StatelessWidget {
-  const _MemberRow({required this.member});
+  const _MemberRow({
+    required this.member,
+    required this.canKick,
+    required this.isKicking,
+    required this.onKick,
+  });
 
   final LobbyMember member;
+  final bool canKick;
+  final bool isKicking;
+  final VoidCallback onKick;
 
   @override
   Widget build(BuildContext context) {
+    final statusText = member.isActive
+        ? member.membershipStatus
+        : '${member.membershipStatus} member';
+
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Icon(member.isHost ? Icons.star_outline : Icons.person_outline),
       title: Text(member.name),
       subtitle: Text(member.roleInLobby),
-      trailing: Text(member.membershipStatus),
+      trailing: isKicking
+          ? const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : canKick
+              ? TextButton.icon(
+                  onPressed: onKick,
+                  icon: const Icon(Icons.person_remove_outlined),
+                  label: const Text('Kick'),
+                )
+              : Text(statusText),
     );
   }
 }
