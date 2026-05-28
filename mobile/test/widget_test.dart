@@ -14,8 +14,8 @@ void main() {
     await tester.pumpWidget(const BuddiesApp());
 
     expect(find.text('Buddies'), findsOneWidget);
-    expect(find.text('Delivery Zone'), findsOneWidget);
-    expect(find.text('KAIST Campus'), findsOneWidget);
-    expect(find.text('Create Lobby'), findsOneWidget);
+    expect(find.text('KAIST email ID'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.text('Login'), findsWidgets);
   });
 }

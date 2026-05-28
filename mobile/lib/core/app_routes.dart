@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 
 import '../screens/auth/login_screen.dart';
+import '../screens/auth/signup_request_screen.dart';
+import '../screens/auth/signup_verify_screen.dart';
 import '../screens/lobby/create_lobby_screen.dart';
 import '../screens/lobby/lobby_list_screen.dart';
 
@@ -10,6 +12,8 @@ class AppRoutes {
   const AppRoutes._();
 
   static const login = '/login';
+  static const signupRequest = '/signup/request';
+  static const signupVerify = '/signup/verify';
   static const lobbyList = '/lobbies';
   static const createLobby = '/lobbies/create';
 }
@@ -20,6 +24,8 @@ class AppRoutes {
 Map<String, WidgetBuilder> buildAppRoutes() {
   return {
     AppRoutes.login: (_) => const LoginScreen(),
+    AppRoutes.signupRequest: (_) => const SignupRequestScreen(),
+    AppRoutes.signupVerify: (_) => const SignupVerifyScreen(),
     AppRoutes.lobbyList: (_) => const LobbyListScreen(),
     AppRoutes.createLobby: (_) => const CreateLobbyScreen(),
   };

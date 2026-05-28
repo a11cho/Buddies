@@ -12,6 +12,7 @@ class TextInputField extends StatelessWidget {
     this.errorText,
     this.maxLines = 1,
     this.prefixIcon,
+    this.suffixText,
     this.onChanged,
     super.key,
   });
@@ -24,6 +25,7 @@ class TextInputField extends StatelessWidget {
   final String? errorText;
   final int maxLines;
   final IconData? prefixIcon;
+  final String? suffixText;
   final ValueChanged<String>? onChanged;
 
   @override
@@ -39,6 +41,7 @@ class TextInputField extends StatelessWidget {
         hintText: hintText,
         errorText: errorText,
         prefixIcon: prefixIcon == null ? null : Icon(prefixIcon),
+        suffixText: suffixText,
         border: const OutlineInputBorder(),
       ),
     );

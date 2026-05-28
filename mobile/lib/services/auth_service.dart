@@ -15,11 +15,52 @@ class AuthSession {
   final User user;
 }
 
+class SignupRequest {
+  const SignupRequest({
+    required this.email,
+    required this.name,
+    required this.password,
+  });
+
+  final String email;
+  final String name;
+  final String password;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'email': email,
+      'name': name,
+      'password': password,
+    };
+  }
+}
+
+class SignupVerifyRequest {
+  const SignupVerifyRequest({
+    required this.email,
+    required this.otp,
+  });
+
+  final String email;
+  final String otp;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'email': email,
+      'otp': otp,
+    };
+  }
+}
+
 abstract class AuthService {
   Future<AuthSession> login({
     required String email,
     required String password,
   });
+
+  Future<void> requestSignup(SignupRequest request);
+
+  Future<void> verifySignup(SignupVerifyRequest request);
 
   Future<User> getMe();
 

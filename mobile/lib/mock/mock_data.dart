@@ -8,8 +8,8 @@ import '../models/user.dart';
 
 const mockCurrentUser = User(
   id: 3,
-  email: 'junsu@example.com',
-  name: 'Junsu',
+  email: 'example@kaist.ac.kr',
+  name: 'Example User',
   role: 'USER',
   profileImageUrl: null,
   trustScore: 4.6,

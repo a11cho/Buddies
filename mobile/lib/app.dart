@@ -17,7 +17,7 @@ class BuddiesApp extends StatelessWidget {
         useMaterial3: true,
       ),
       // 앱을 처음 켰을 때 보여줄 화면입니다.
-      initialRoute: AppRoutes.lobbyList,
+      initialRoute: AppRoutes.login,
       // 문자열 route 이름과 실제 화면 Widget을 연결합니다.
       routes: buildAppRoutes(),
     );
