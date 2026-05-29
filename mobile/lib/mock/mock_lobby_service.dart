@@ -65,6 +65,12 @@ class MockLobbyService implements LobbyService {
       paymentRecords: const [],
     );
     _store.lobbies.add(newLobby);
+    _store.addSystemMessage(
+      lobbyId: newLobby.lobbyId,
+      eventType: 'lobby.created',
+      content: '${_store.currentUser.name} created this Lobby.',
+      targetUserId: _store.currentUser.id,
+    );
     return newLobby;
   }
 
@@ -103,6 +109,12 @@ class MockLobbyService implements LobbyService {
             updatedMembers.where((member) => member.isActive).length,
       ),
     );
+    _store.addSystemMessage(
+      lobbyId: lobbyId,
+      eventType: 'lobby.member_joined',
+      content: '${_store.currentUser.name} joined the Lobby.',
+      targetUserId: _store.currentUser.id,
+    );
     return newMember;
   }
 
@@ -120,6 +132,22 @@ class MockLobbyService implements LobbyService {
   @override
   Future<void> leaveLobby(int lobbyId) async {
     final lobby = _store.findLobby(lobbyId);
+    if (lobby.orderStatus != LobbyStatus.waiting) {
+      throw StateError('Participants can only leave while WAITING.');
+    }
+
+    final currentMember = lobby.members.firstWhere(
+      (member) => member.userId == _store.currentUser.id,
+      orElse: () => throw StateError('You are not a Lobby member.'),
+    );
+    if (!currentMember.isActive) {
+      throw StateError('You are not an active Lobby member.');
+    }
+    if (currentMember.isHost) {
+      throw StateError('Host should cancel the Lobby or transfer host.');
+    }
+
+    final currentUserName = _store.currentUser.name;
     final updatedMembers = lobby.members.map((member) {
       if (member.userId != _store.currentUser.id) {
         return member;
@@ -129,13 +157,115 @@ class MockLobbyService implements LobbyService {
         leftAt: DateTime.now(),
       );
     }).toList();
+    final updatedItems = lobby.cartItems
+        .where((item) => item.ownerUserId != _store.currentUser.id)
+        .toList();
+    final updatedTotal = _calculateCurrentTotal(updatedItems);
     _store.replaceLobby(
       lobby.copyWith(
         members: updatedMembers,
+        cartItems: updatedItems,
+        currentTotalAmount: updatedTotal,
+        remainingAmount: _calculateRemaining(
+          lobby.minimumOrderAmount,
+          updatedTotal,
+        ),
         participantCount:
             updatedMembers.where((member) => member.isActive).length,
       ),
     );
+    _store.addSystemMessage(
+      lobbyId: lobbyId,
+      eventType: 'lobby.member_left',
+      content: '$currentUserName left the Lobby.',
+      targetUserId: _store.currentUser.id,
+    );
+  }
+
+  @override
+  Future<void> cancelLobby(int lobbyId) async {
+    final lobby = _store.findLobby(lobbyId);
+    if (lobby.hostUserId != _store.currentUser.id) {
+      throw StateError('Only the Host can cancel the Lobby.');
+    }
+    if (lobby.orderStatus != LobbyStatus.waiting) {
+      throw StateError('Only WAITING lobbies can be canceled.');
+    }
+
+    final canceledAt = DateTime.now();
+    final updatedMembers = lobby.members.map((member) {
+      if (!member.isActive) {
+        return member;
+      }
+      return member.copyWith(
+        membershipStatus: MembershipStatus.left,
+        leftAt: canceledAt,
+      );
+    }).toList();
+
+    _store.replaceLobby(
+      lobby.copyWith(
+        orderStatus: LobbyStatus.canceled,
+        members: updatedMembers,
+        participantCount: 0,
+      ),
+    );
+    _store.addSystemMessage(
+      lobbyId: lobbyId,
+      eventType: 'lobby.canceled',
+      content: '${_store.currentUser.name} canceled the Lobby.',
+      targetUserId: _store.currentUser.id,
+    );
+  }
+
+  @override
+  Future<Lobby> transferHost(int lobbyId, int targetUserId) async {
+    final lobby = _store.findLobby(lobbyId);
+    if (lobby.hostUserId != _store.currentUser.id) {
+      throw StateError('Only the Host can transfer Host role.');
+    }
+    if (lobby.orderStatus != LobbyStatus.waiting) {
+      throw StateError('Host can only be transferred while WAITING.');
+    }
+    if (targetUserId == _store.currentUser.id) {
+      throw StateError('You are already the Host.');
+    }
+
+    final targetMember = lobby.members.firstWhere(
+      (member) => member.userId == targetUserId,
+      orElse: () => throw StateError('Lobby member not found: $targetUserId'),
+    );
+    if (!targetMember.isActive) {
+      throw StateError('Host can only be transferred to active Participants.');
+    }
+    if (targetMember.isHost) {
+      throw StateError('Target member is already the Host.');
+    }
+
+    final updatedMembers = lobby.members.map((member) {
+      if (member.userId == _store.currentUser.id) {
+        return member.copyWith(roleInLobby: RoleInLobby.participant);
+      }
+      if (member.userId == targetUserId) {
+        return member.copyWith(roleInLobby: RoleInLobby.host);
+      }
+      return member;
+    }).toList();
+    final updatedLobby = lobby.copyWith(
+      hostUserId: targetMember.userId,
+      hostName: targetMember.name,
+      members: updatedMembers,
+    );
+
+    _store.replaceLobby(updatedLobby);
+    _store.addSystemMessage(
+      lobbyId: lobbyId,
+      eventType: 'lobby.host_transferred',
+      content: '${_store.currentUser.name} transferred Host to '
+          '${targetMember.name}.',
+      targetUserId: targetMember.userId,
+    );
+    return updatedLobby;
   }
 
   @override
@@ -161,6 +291,7 @@ class MockLobbyService implements LobbyService {
     if (targetMember.isHost) {
       throw StateError('Only Participants can be kicked.');
     }
+    final targetName = targetMember.name;
 
     final kickedAt = DateTime.now();
     final updatedMembers = lobby.members.map((member) {
@@ -188,6 +319,12 @@ class MockLobbyService implements LobbyService {
           updatedMembers.where((member) => member.isActive).length,
     );
     _store.replaceLobby(updatedLobby);
+    _store.addSystemMessage(
+      lobbyId: lobbyId,
+      eventType: 'lobby.member_kicked',
+      content: '$targetName was kicked from the Lobby.',
+      targetUserId: userId,
+    );
     return updatedLobby;
   }
 
@@ -203,8 +340,14 @@ class MockLobbyService implements LobbyService {
     if (newStatus == LobbyStatus.orderPlaced && !lobby.allPaymentsPaid) {
       throw StateError('All payment records must be PAID before order placed.');
     }
+    final previousStatus = lobby.orderStatus;
     final updatedLobby = lobby.copyWith(orderStatus: newStatus);
     _store.replaceLobby(updatedLobby);
+    _store.addSystemMessage(
+      lobbyId: lobbyId,
+      eventType: 'lobby.status_updated',
+      content: 'Lobby status changed from $previousStatus to $newStatus.',
+    );
     return updatedLobby;
   }
 

@@ -153,6 +153,11 @@ class MockCartService implements CartService {
         paymentRecords: paymentRecords,
       ),
     );
+    _store.addSystemMessage(
+      lobbyId: lobbyId,
+      eventType: 'cart.locked',
+      content: 'Cart was locked. Payment records are ready.',
+    );
 
     return LockCartResult(
       lobbyId: lobbyId,

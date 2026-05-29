@@ -19,10 +19,21 @@ class ChatConnectionInfo {
   final int heartbeatOutgoing;
 }
 
+class ChatValidation {
+  const ChatValidation._();
+
+  static const maxUserMessageLength = 500;
+  static const defaultHistoryLimit = 50;
+}
+
 abstract class ChatService {
   Future<ChatConnectionInfo> getConnectionInfo(int lobbyId);
 
-  Future<ChatHistoryResponse> getMessages(int lobbyId);
+  Future<ChatHistoryResponse> getMessages(
+    int lobbyId, {
+    int limit = ChatValidation.defaultHistoryLimit,
+    int? cursor,
+  });
 
   Future<ChatMessage> sendMessage(int lobbyId, String content);
 

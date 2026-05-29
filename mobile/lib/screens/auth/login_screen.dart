@@ -85,6 +85,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
             child: const Text('Create account'),
           ),
+          TextButton(
+            onPressed: _isSubmitting
+                ? null
+                : () {
+                    Navigator.pushNamed(context, AppRoutes.passwordResetRequest);
+                  },
+            child: const Text('Forgot password?'),
+          ),
         ],
       ),
     );

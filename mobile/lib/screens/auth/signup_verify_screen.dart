@@ -18,6 +18,7 @@ class SignupVerifyScreen extends StatefulWidget {
 class _SignupVerifyScreenState extends State<SignupVerifyScreen> {
   final TextEditingController _otpController = TextEditingController();
   bool _isSubmitting = false;
+  bool _isResending = false;
 
   @override
   void dispose() {
@@ -51,6 +52,19 @@ class _SignupVerifyScreenState extends State<SignupVerifyScreen> {
             icon: Icons.verified_outlined,
             isLoading: _isSubmitting,
             onPressed: () => _submit(email),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _isSubmitting || _isResending
+                ? null
+                : () => _resendOtp(email),
+            icon: _isResending
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            label: const Text('Resend OTP'),
           ),
         ],
       ),
@@ -100,6 +114,42 @@ class _SignupVerifyScreenState extends State<SignupVerifyScreen> {
       if (mounted) {
         setState(() {
           _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _resendOtp(String email) async {
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email is missing.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isResending = true;
+    });
+
+    try {
+      await AppServices.authService.resendSignupOtp(email);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('OTP resent.')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResending = false;
         });
       }
     }

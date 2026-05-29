@@ -21,6 +21,28 @@ class User {
   final double trustScore;
   final String status;
 
+  User copyWith({
+    int? id,
+    String? email,
+    String? name,
+    String? role,
+    String? profileImageUrl,
+    bool clearProfileImageUrl = false,
+    double? trustScore,
+    String? status,
+  }) {
+    return User(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      name: name ?? this.name,
+      role: role ?? this.role,
+      profileImageUrl:
+          clearProfileImageUrl ? null : profileImageUrl ?? this.profileImageUrl,
+      trustScore: trustScore ?? this.trustScore,
+      status: status ?? this.status,
+    );
+  }
+
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: parseJsonInt(json['id'] ?? json['userId'], 'id'),

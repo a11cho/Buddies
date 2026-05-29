@@ -88,6 +88,26 @@ List<Lobby> createInitialMockLobbies() {
       subtotal: 12000,
     ),
   ];
+  const historyCartItems = [
+    CartItem(
+      cartItemId: 401,
+      lobbyId: 13,
+      ownerUserId: 3,
+      itemName: 'Chicken Mayo',
+      unitPrice: 6500,
+      quantity: 1,
+      subtotal: 6500,
+    ),
+    CartItem(
+      cartItemId: 402,
+      lobbyId: 13,
+      ownerUserId: 14,
+      itemName: 'Tuna Mayo',
+      unitPrice: 6000,
+      quantity: 2,
+      subtotal: 12000,
+    ),
+  ];
 
   return [
     Lobby(
@@ -237,6 +257,70 @@ List<Lobby> createInitialMockLobbies() {
       ],
       cartItems: subwayCartItems,
       paymentRecords: const [],
+    ),
+    Lobby(
+      lobbyId: 13,
+      hostUserId: 14,
+      hostName: 'Jisoo',
+      hostTrustScore: 4.8,
+      restaurantName: 'Hansot',
+      deliveryZone: DeliveryZone.north,
+      minimumOrderAmount: 15000,
+      currentTotalAmount: _cartTotal(historyCartItems),
+      remainingAmount: _remainingAmount(15000, historyCartItems),
+      deliveryFee: 2500,
+      participantCount: 2,
+      orderStatus: LobbyStatus.closed,
+      cartLockedAt: DateTime(2026, 5, 3, 12, 20),
+      lastReadMessageId: 1201,
+      unreadCount: 0,
+      members: const [
+        LobbyMember(
+          userId: 14,
+          name: 'Jisoo',
+          roleInLobby: RoleInLobby.host,
+          membershipStatus: MembershipStatus.active,
+          lastReadMessageId: 1201,
+        ),
+        LobbyMember(
+          userId: 3,
+          name: 'Example User',
+          roleInLobby: RoleInLobby.participant,
+          membershipStatus: MembershipStatus.active,
+          lastReadMessageId: 1201,
+        ),
+      ],
+      cartItems: historyCartItems,
+      paymentRecords: [
+        PaymentRecord(
+          paymentRecordId: 301,
+          lobbyId: 13,
+          userId: 14,
+          amount: _paymentAmount(
+            cartItems: historyCartItems,
+            userId: 14,
+            deliveryFee: 2500,
+            memberCount: 2,
+          ),
+          status: PaymentStatus.paid,
+          confirmedByHostId: 14,
+          confirmedAt: DateTime(2026, 5, 3, 12, 20),
+        ),
+        PaymentRecord(
+          paymentRecordId: 302,
+          lobbyId: 13,
+          userId: 3,
+          amount: _paymentAmount(
+            cartItems: historyCartItems,
+            userId: 3,
+            deliveryFee: 2500,
+            memberCount: 2,
+          ),
+          status: PaymentStatus.paid,
+          confirmedByHostId: 14,
+          confirmedAt: DateTime(2026, 5, 3, 12, 25),
+        ),
+      ],
     ),
   ];
 }

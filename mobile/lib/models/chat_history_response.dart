@@ -6,17 +6,23 @@ import 'json_parsing.dart';
 class ChatHistoryResponse {
   const ChatHistoryResponse({
     required this.messages,
+    this.hasMore = false,
     this.lastReadMessageId,
+    this.nextCursor,
   });
 
   final int? lastReadMessageId;
   final List<ChatMessage> messages;
+  final bool hasMore;
+  final int? nextCursor;
 
   factory ChatHistoryResponse.fromJson(Map<String, dynamic> json) {
     return ChatHistoryResponse(
       lastReadMessageId:
           parseNullableJsonInt(json['lastReadMessageId'], 'lastReadMessageId'),
       messages: parseJsonList(json['messages'], ChatMessage.fromJson),
+      hasMore: json['hasMore'] as bool? ?? false,
+      nextCursor: parseNullableJsonInt(json['nextCursor'], 'nextCursor'),
     );
   }
 
@@ -24,6 +30,8 @@ class ChatHistoryResponse {
     return {
       'lastReadMessageId': lastReadMessageId,
       'messages': messages.map((message) => message.toJson()).toList(),
+      'hasMore': hasMore,
+      'nextCursor': nextCursor,
     };
   }
 }

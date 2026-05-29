@@ -28,12 +28,16 @@ class LobbyDetailScreen extends StatefulWidget {
 
 class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
   Future<_LobbyDetailData>? _detailFuture;
+  _LobbyDetailData? _cachedDetailData;
   int? _lobbyId;
   bool _isJoining = false;
+  bool _isLeavingLobby = false;
+  bool _isCancelingLobby = false;
   bool _isLockingCart = false;
   bool _isUpdatingStatus = false;
   int? _confirmingPaymentRecordId;
   int? _kickingUserId;
+  int? _transferringHostUserId;
 
   @override
   void didChangeDependencies() {
@@ -45,6 +49,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
 
     if (_lobbyId != nextLobbyId) {
       _lobbyId = nextLobbyId;
+      _cachedDetailData = null;
       _detailFuture = nextLobbyId == null ? null : _loadDetail(nextLobbyId);
     }
   }
@@ -56,11 +61,13 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
     final isInActiveLobby = allLobbies.any(
       (candidate) => _isCurrentUserInActiveLobby(candidate, user.id),
     );
-    return _LobbyDetailData(
+    final data = _LobbyDetailData(
       lobby: lobby,
       currentUser: user,
       isInActiveLobby: isInActiveLobby,
     );
+    _cachedDetailData = data;
+    return data;
   }
 
   void _refreshDetail() {
@@ -110,6 +117,128 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       if (mounted) {
         setState(() {
           _isJoining = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _leaveLobby(Lobby lobby) async {
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Leave Lobby'),
+          content: const Text(
+            'Leave this Lobby? Your cart items will be removed.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Leave'),
+            ),
+          ],
+        );
+      },
+    );
+    if (shouldLeave != true) {
+      return;
+    }
+
+    setState(() {
+      _isLeavingLobby = true;
+    });
+
+    var didExitScreen = false;
+    try {
+      await AppServices.lobbyService.leaveLobby(lobby.lobbyId);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Left ${lobby.restaurantName}.')),
+      );
+      Navigator.pop(context, true);
+      didExitScreen = true;
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted && !didExitScreen) {
+        setState(() {
+          _isLeavingLobby = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _cancelLobby(Lobby lobby) async {
+    final shouldCancel = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Cancel Lobby'),
+          content: const Text(
+            'Cancel this Lobby? Members will no longer be able to order here.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Back'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Cancel Lobby'),
+            ),
+          ],
+        );
+      },
+    );
+    if (shouldCancel != true) {
+      return;
+    }
+
+    setState(() {
+      _isCancelingLobby = true;
+    });
+
+    var didExitScreen = false;
+    try {
+      await AppServices.lobbyService.cancelLobby(lobby.lobbyId);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Canceled ${lobby.restaurantName}.')),
+      );
+      Navigator.pop(context, true);
+      didExitScreen = true;
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted && !didExitScreen) {
+        setState(() {
+          _isCancelingLobby = false;
         });
       }
     }
@@ -314,6 +443,63 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
     }
   }
 
+  Future<void> _transferHost(Lobby lobby, LobbyMember member) async {
+    final shouldTransfer = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Transfer Host'),
+          content: Text('Transfer Host role to ${member.name}?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Transfer'),
+            ),
+          ],
+        );
+      },
+    );
+    if (shouldTransfer != true) {
+      return;
+    }
+
+    setState(() {
+      _transferringHostUserId = member.userId;
+    });
+
+    try {
+      await AppServices.lobbyService.transferHost(lobby.lobbyId, member.userId);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${member.name} is now the Host.')),
+      );
+      _refreshDetail();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _transferringHostUserId = null;
+        });
+      }
+    }
+  }
+
   Future<void> _confirmPaymentRecord(Lobby lobby, int paymentRecordId) async {
     setState(() {
       _confirmingPaymentRecordId = paymentRecordId;
@@ -406,12 +592,14 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       title: 'Lobby Detail',
       body: FutureBuilder<_LobbyDetailData>(
         future: detailFuture,
+        initialData: _cachedDetailData,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const LoadingView(message: 'Loading lobby...');
           }
 
-          if (snapshot.hasError) {
+          if (snapshot.hasError && !snapshot.hasData) {
             return ErrorMessageView(
               message: 'Lobby 상세 정보를 불러오지 못했습니다.',
               onRetry: _refreshDetail,
@@ -427,11 +615,20 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
               ? 'Already in a lobby'
               : null;
           final isHost = lobby.hostUserId == data.currentUser.id;
+          final visibleMembers = _visibleMembers(lobby);
+          final canLeaveLobby =
+              isMember && !isHost && lobby.orderStatus == LobbyStatus.waiting;
+          final canCancelLobby =
+              isMember && isHost && lobby.orderStatus == LobbyStatus.waiting;
           final canEditCart = isMember && lobby.canEditCart;
           final shouldShowLockCart =
               isHost && lobby.orderStatus == LobbyStatus.waiting;
           final canKickMembers =
               isHost && lobby.orderStatus == LobbyStatus.waiting;
+          final canTransferHost =
+              isHost && lobby.orderStatus == LobbyStatus.waiting;
+          final memberActionInProgress =
+              _kickingUserId != null || _transferringHostUserId != null;
           final canLockCart =
               shouldShowLockCart &&
               lobby.currentTotalAmount >= lobby.minimumOrderAmount;
@@ -441,6 +638,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
           final statusAction = _statusActionFor(lobby);
 
           return ListView(
+            key: PageStorageKey<String>('lobby-detail-${lobby.lobbyId}'),
             padding: const EdgeInsets.all(16),
             children: [
               if (isMember)
@@ -482,22 +680,45 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                   ),
                 ),
               ],
+              if (canLeaveLobby || canCancelLobby) ...[
+                const SizedBox(height: 8),
+                _ExitLobbyAction(
+                  label: canCancelLobby ? 'Cancel Lobby' : 'Leave Lobby',
+                  icon: canCancelLobby
+                      ? Icons.cancel_outlined
+                      : Icons.logout_outlined,
+                  isLoading: canCancelLobby
+                      ? _isCancelingLobby
+                      : _isLeavingLobby,
+                  onPressed: canCancelLobby
+                      ? () => _cancelLobby(lobby)
+                      : () => _leaveLobby(lobby),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
                 'Members',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              for (final member in lobby.members)
-                _MemberRow(
-                  member: member,
-                  canKick: canKickMembers &&
-                      member.isActive &&
-                      !member.isHost &&
-                      _kickingUserId == null,
-                  isKicking: _kickingUserId == member.userId,
-                  onKick: () => _kickMember(lobby, member),
-                ),
+              if (visibleMembers.isEmpty)
+                const _MutedText('No active members.')
+              else
+                for (final member in visibleMembers)
+                  _MemberRow(
+                    member: member,
+                    canKick: canKickMembers &&
+                        !member.isHost &&
+                        !memberActionInProgress,
+                    isKicking: _kickingUserId == member.userId,
+                    canTransferHost: canTransferHost &&
+                        !member.isHost &&
+                        !memberActionInProgress,
+                    isTransferringHost:
+                        _transferringHostUserId == member.userId,
+                    onKick: () => _kickMember(lobby, member),
+                    onTransferHost: () => _transferHost(lobby, member),
+                  ),
               const SizedBox(height: 16),
               _SectionHeader(
                 title: 'Cart Items',
@@ -601,7 +822,34 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
     return _isActiveMember(lobby, currentUserId);
   }
 
+  List<LobbyMember> _visibleMembers(Lobby lobby) {
+    // LEFT/KICKED member는 서버 기록으로는 남을 수 있지만, 화면에는 현재 참여자만 보여줍니다.
+    final members = lobby.members.where((member) => member.isActive).toList();
+    members.sort((first, second) {
+      final firstIsHost = first.isHost || first.userId == lobby.hostUserId;
+      final secondIsHost = second.isHost || second.userId == lobby.hostUserId;
+      if (firstIsHost != secondIsHost) {
+        return firstIsHost ? -1 : 1;
+      }
+
+      final nameCompare = first.name.toLowerCase().compareTo(
+            second.name.toLowerCase(),
+          );
+      if (nameCompare != 0) {
+        return nameCompare;
+      }
+      return first.userId.compareTo(second.userId);
+    });
+    return members;
+  }
+
   String _memberNameById(Lobby lobby, int userId) {
+    final activeMembers = lobby.members.where((member) => member.isActive);
+    for (final member in activeMembers) {
+      if (member.userId == userId) {
+        return member.name;
+      }
+    }
     for (final member in lobby.members) {
       if (member.userId == userId) {
         return member.name;
@@ -731,6 +979,40 @@ class _MutedText extends StatelessWidget {
               color: Theme.of(context).colorScheme.outline,
             ),
       ),
+    );
+  }
+}
+
+class _ExitLobbyAction extends StatelessWidget {
+  const _ExitLobbyAction({
+    required this.label,
+    required this.icon,
+    required this.isLoading,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool isLoading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return OutlinedButton.icon(
+      onPressed: isLoading ? null : onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: colorScheme.error,
+        side: BorderSide(color: colorScheme.error),
+      ),
+      icon: isLoading
+          ? const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(icon),
+      label: Text(label),
     );
   }
 }
@@ -889,37 +1171,77 @@ class _MemberRow extends StatelessWidget {
     required this.member,
     required this.canKick,
     required this.isKicking,
+    required this.canTransferHost,
+    required this.isTransferringHost,
     required this.onKick,
+    required this.onTransferHost,
   });
 
   final LobbyMember member;
   final bool canKick;
   final bool isKicking;
+  final bool canTransferHost;
+  final bool isTransferringHost;
   final VoidCallback onKick;
+  final VoidCallback onTransferHost;
 
   @override
   Widget build(BuildContext context) {
     final statusText = member.isActive
         ? member.membershipStatus
         : '${member.membershipStatus} member';
+    final isProcessing = isKicking || isTransferringHost;
+    final hasHostAction = canTransferHost || canKick;
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Icon(member.isHost ? Icons.star_outline : Icons.person_outline),
       title: Text(member.name),
       subtitle: Text(member.roleInLobby),
-      trailing: isKicking
+      trailing: isProcessing
           ? const SizedBox.square(
               dimension: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : canKick
-              ? TextButton.icon(
-                  onPressed: onKick,
-                  icon: const Icon(Icons.person_remove_outlined),
-                  label: const Text('Kick'),
+          : hasHostAction
+              ? PopupMenuButton<_MemberAction>(
+                  tooltip: 'Member actions',
+                  onSelected: (action) {
+                    if (action == _MemberAction.transferHost) {
+                      onTransferHost();
+                    } else {
+                      onKick();
+                    }
+                  },
+                  itemBuilder: (context) {
+                    return [
+                      if (canTransferHost)
+                        const PopupMenuItem<_MemberAction>(
+                          value: _MemberAction.transferHost,
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.switch_account_outlined),
+                            title: Text('Transfer Host'),
+                          ),
+                        ),
+                      if (canKick)
+                        const PopupMenuItem<_MemberAction>(
+                          value: _MemberAction.kick,
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.person_remove_outlined),
+                            title: Text('Kick'),
+                          ),
+                        ),
+                    ];
+                  },
                 )
               : Text(statusText),
     );
   }
+}
+
+enum _MemberAction {
+  transferHost,
+  kick,
 }

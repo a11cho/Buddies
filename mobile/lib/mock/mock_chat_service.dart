@@ -10,6 +10,14 @@ class MockChatService implements ChatService {
 
   final MockDataStore _store;
 
+  static const _restrictedKeywords = [
+    'badword',
+    'spamword',
+    '욕설금지',
+  ];
+  static const _rateLimitWindow = Duration(seconds: 10);
+  static const _rateLimitMessageCount = 5;
+
   @override
   Future<ChatConnectionInfo> getConnectionInfo(int lobbyId) async {
     final lobby = _store.findLobby(lobbyId);
@@ -23,14 +31,21 @@ class MockChatService implements ChatService {
   }
 
   @override
-  Future<ChatHistoryResponse> getMessages(int lobbyId) async {
+  Future<ChatHistoryResponse> getMessages(
+    int lobbyId, {
+    int limit = ChatValidation.defaultHistoryLimit,
+    int? cursor,
+  }) async {
     final lobby = _store.findLobby(lobbyId);
     _ensureCurrentUserIsActiveMember(lobby);
     final messages = List<ChatMessage>.from(_store.findMessages(lobbyId))
       ..sort((left, right) => left.id.compareTo(right.id));
+    final page = _pageMessages(messages, limit: limit, cursor: cursor);
     return ChatHistoryResponse(
       lastReadMessageId: lobby.lastReadMessageId,
-      messages: messages,
+      messages: page.messages,
+      hasMore: page.hasMore,
+      nextCursor: page.nextCursor,
     );
   }
 
@@ -38,9 +53,7 @@ class MockChatService implements ChatService {
   Future<ChatMessage> sendMessage(int lobbyId, String content) async {
     final lobby = _store.findLobby(lobbyId);
     _ensureCurrentUserIsActiveMember(lobby);
-    if (content.trim().isEmpty) {
-      throw StateError('Message content is required.');
-    }
+    _validateUserMessage(lobbyId, content);
 
     final message = ChatMessage(
       id: _store.nextMessageId++,
@@ -51,8 +64,81 @@ class MockChatService implements ChatService {
       createdAt: DateTime.now(),
     );
     _store.findMessages(lobbyId).add(message);
+    _recordUserMessage(lobbyId);
     await markAsRead(lobbyId, message.id);
     return message;
+  }
+
+  void _validateUserMessage(int lobbyId, String content) {
+    final trimmedContent = content.trim();
+    if (trimmedContent.isEmpty) {
+      throw StateError('Message content is required.');
+    }
+    if (_store.currentUser.status != UserStatus.active) {
+      throw StateError('ACCOUNT_RESTRICTED');
+    }
+    if (trimmedContent.length > ChatValidation.maxUserMessageLength) {
+      throw StateError('MESSAGE_TOO_LONG');
+    }
+    final lowerContent = trimmedContent.toLowerCase();
+    final hasRestrictedKeyword = _restrictedKeywords.any(
+      (keyword) => lowerContent.contains(keyword.toLowerCase()),
+    );
+    if (hasRestrictedKeyword) {
+      throw StateError('RESTRICTED_KEYWORD');
+    }
+    if (_isRateLimited(lobbyId)) {
+      throw StateError('RATE_LIMITED');
+    }
+  }
+
+  bool _isRateLimited(int lobbyId) {
+    final now = DateTime.now();
+    final key = _sendRateLimitKey(lobbyId);
+    final timestamps = _store.chatSendTimestampsByLobbyUser.putIfAbsent(
+      key,
+      () => [],
+    );
+    timestamps.removeWhere(
+      (timestamp) => now.difference(timestamp) > _rateLimitWindow,
+    );
+    return timestamps.length >= _rateLimitMessageCount;
+  }
+
+  void _recordUserMessage(int lobbyId) {
+    final key = _sendRateLimitKey(lobbyId);
+    _store.chatSendTimestampsByLobbyUser.putIfAbsent(key, () => []).add(
+          DateTime.now(),
+        );
+  }
+
+  String _sendRateLimitKey(int lobbyId) {
+    return '$lobbyId:${_store.currentUser.id}';
+  }
+
+  _MessagePage _pageMessages(
+    List<ChatMessage> messages, {
+    required int limit,
+    int? cursor,
+  }) {
+    final safeLimit = limit <= 0 ? ChatValidation.defaultHistoryLimit : limit;
+    final beforeCursor = cursor == null
+        ? messages
+        : messages.where((message) => message.id < cursor).toList();
+    if (beforeCursor.length <= safeLimit) {
+      return _MessagePage(
+        messages: beforeCursor,
+        hasMore: false,
+        nextCursor: beforeCursor.isEmpty ? null : beforeCursor.first.id,
+      );
+    }
+
+    final page = beforeCursor.sublist(beforeCursor.length - safeLimit);
+    return _MessagePage(
+      messages: page,
+      hasMore: true,
+      nextCursor: page.first.id,
+    );
   }
 
   @override
@@ -106,4 +192,16 @@ class MockChatService implements ChatService {
     }
     return currentMessageId > nextMessageId ? currentMessageId : nextMessageId;
   }
+}
+
+class _MessagePage {
+  const _MessagePage({
+    required this.messages,
+    required this.hasMore,
+    required this.nextCursor,
+  });
+
+  final List<ChatMessage> messages;
+  final bool hasMore;
+  final int? nextCursor;
 }

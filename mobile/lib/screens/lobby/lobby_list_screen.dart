@@ -173,10 +173,9 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
       title: 'Buddies',
       actions: [
         IconButton(
-          tooltip: 'Login',
+          tooltip: 'Profile',
           onPressed: () {
-            // route 이름으로 LoginScreen으로 이동합니다.
-            Navigator.pushNamed(context, AppRoutes.login);
+            Navigator.pushNamed(context, AppRoutes.profile);
           },
           icon: const Icon(Icons.person_outline),
         ),
@@ -201,7 +200,6 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const StatusCard(title: 'Delivery Zone', value: 'KAIST Campus'),
               StatusCard(
                 title: 'Active Lobby',
                 value: '${lobbies.length} mock lobbies',

@@ -9,10 +9,14 @@ class AppServices {
   AppServices._();
 
   static final AuthService authService = _buildAuthService();
+  static final UserService userService = _buildUserService();
   static final LobbyService lobbyService = _buildLobbyService();
   static final CartService cartService = _buildCartService();
   static final PaymentService paymentService = _buildPaymentService();
   static final ChatService chatService = _buildChatService();
+  static final ReportService reportService = _buildReportService();
+  static final RatingService ratingService = _buildRatingService();
+  static final HelpService helpService = _buildHelpService();
   static final TokenStorage tokenStorage = InMemoryTokenStorage();
 
   static AuthService _buildAuthService() {
@@ -20,6 +24,13 @@ class AppServices {
       return MockAuthService();
     }
     throw UnimplementedError('ApiAuthService is not implemented yet.');
+  }
+
+  static UserService _buildUserService() {
+    if (useMockMode) {
+      return MockUserService();
+    }
+    throw UnimplementedError('ApiUserService is not implemented yet.');
   }
 
   static LobbyService _buildLobbyService() {
@@ -48,5 +59,26 @@ class AppServices {
       return MockChatService();
     }
     throw UnimplementedError('ApiChatService is not implemented yet.');
+  }
+
+  static ReportService _buildReportService() {
+    if (useMockMode) {
+      return MockReportService();
+    }
+    throw UnimplementedError('ApiReportService is not implemented yet.');
+  }
+
+  static RatingService _buildRatingService() {
+    if (useMockMode) {
+      return MockRatingService();
+    }
+    throw UnimplementedError('ApiRatingService is not implemented yet.');
+  }
+
+  static HelpService _buildHelpService() {
+    if (useMockMode) {
+      return MockHelpService();
+    }
+    throw UnimplementedError('ApiHelpService is not implemented yet.');
   }
 }

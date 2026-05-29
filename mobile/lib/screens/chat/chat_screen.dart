@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/enums.dart';
@@ -6,11 +7,13 @@ import '../../models/chat_history_response.dart';
 import '../../models/chat_message.dart';
 import '../../models/lobby.dart';
 import '../../models/user.dart';
+import '../../services/chat_service.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/chat_message_bubble.dart';
 import '../../widgets/empty_state_view.dart';
 import '../../widgets/error_message_view.dart';
 import '../../widgets/loading_view.dart';
+import '../report/report_dialog.dart';
 
 // Lobby 안에서 사용하는 Chat 화면입니다.
 // 현재는 MockChatService의 메시지 목록을 사용하고, 이후 WebSocket/STOMP로 교체할 수 있게 service만 호출합니다.
@@ -25,8 +28,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Future<_ChatScreenData>? _chatFuture;
+  _ChatScreenData? _chatData;
   int? _lobbyId;
   bool _isSending = false;
+  bool _isLoadingOlderMessages = false;
 
   @override
   void didChangeDependencies() {
@@ -38,6 +43,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (_lobbyId != nextLobbyId) {
       _lobbyId = nextLobbyId;
+      _chatData = null;
       _chatFuture = nextLobbyId == null ? null : _loadChat(nextLobbyId);
     }
   }
@@ -75,6 +81,8 @@ class _ChatScreenState extends State<ChatScreen> {
       lastReadMessageId: history.lastReadMessageId,
       messages: history.messages,
       canAccessChat: true,
+      hasMore: history.hasMore,
+      nextCursor: history.nextCursor,
     );
   }
 
@@ -99,12 +107,14 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     setState(() {
+      _chatData = null;
       _chatFuture = _loadChat(lobbyId);
     });
   }
 
   Future<void> _sendMessage() async {
     final lobbyId = _lobbyId;
+    final currentData = _chatData;
     final content = _messageController.text.trim();
     if (lobbyId == null || content.isEmpty || _isSending) {
       return;
@@ -115,12 +125,31 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     try {
-      await AppServices.chatService.sendMessage(lobbyId, content);
+      final sentMessage = await AppServices.chatService.sendMessage(
+        lobbyId,
+        content,
+      );
       if (!mounted) {
         return;
       }
       _messageController.clear();
-      _refreshChat();
+      if (currentData == null) {
+        _refreshChat();
+      } else {
+        final nextMessages = _mergeMessages(
+          olderMessages: currentData.messages,
+          currentMessages: [sentMessage],
+        );
+        final nextData = currentData.copyWith(
+          messages: nextMessages,
+          lastReadMessageId: sentMessage.id,
+        );
+        setState(() {
+          _chatData = nextData;
+          _chatFuture = SynchronousFuture(nextData);
+        });
+        _scrollToBottom();
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -135,6 +164,92 @@ class _ChatScreenState extends State<ChatScreen> {
         });
       }
     }
+  }
+
+  Future<void> _loadOlderMessages(_ChatScreenData data) async {
+    final cursor = data.nextCursor;
+    if (cursor == null || _isLoadingOlderMessages) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingOlderMessages = true;
+    });
+
+    try {
+      final history = await AppServices.chatService.getMessages(
+        data.lobby.lobbyId,
+        cursor: cursor,
+      );
+      if (!mounted) {
+        return;
+      }
+      final mergedMessages = _mergeMessages(
+        olderMessages: history.messages,
+        currentMessages: data.messages,
+      );
+      final nextData = data.copyWith(
+        messages: mergedMessages,
+        hasMore: history.hasMore,
+        nextCursor: history.nextCursor,
+      );
+      setState(() {
+        _chatData = nextData;
+        _chatFuture = SynchronousFuture(nextData);
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingOlderMessages = false;
+        });
+      }
+    }
+  }
+
+  List<ChatMessage> _mergeMessages({
+    required List<ChatMessage> olderMessages,
+    required List<ChatMessage> currentMessages,
+  }) {
+    final messagesById = <int, ChatMessage>{};
+    for (final message in [...olderMessages, ...currentMessages]) {
+      messagesById[message.id] = message;
+    }
+    return messagesById.values.toList()
+      ..sort((left, right) => left.id.compareTo(right.id));
+  }
+
+  Future<void> _reportMessage(_ChatScreenData data, ChatMessage message) async {
+    final reportedUserId = message.senderUserId;
+    if (reportedUserId == null) {
+      return;
+    }
+
+    final didSubmit = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return ReportDialog(
+          lobbyId: data.lobby.lobbyId,
+          reportedUserId: reportedUserId,
+          reportedUserName: _memberNameById(data.lobby, reportedUserId) ??
+              'User $reportedUserId',
+          reportedMessageId: message.id,
+          messagePreview: message.content ?? message.mediaUrl,
+        );
+      },
+    );
+    if (!mounted || didSubmit != true) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Report submitted.')),
+    );
   }
 
   void _scrollToBottom() {
@@ -179,6 +294,7 @@ class _ChatScreenState extends State<ChatScreen> {
           }
 
           final data = snapshot.data!;
+          _chatData = data;
           if (!data.canAccessChat) {
             return ErrorMessageView(
               message: 'Active Lobby member만 Chat을 사용할 수 있습니다.',
@@ -217,6 +333,26 @@ class _ChatScreenState extends State<ChatScreen> {
     final rows = <Widget>[];
     var unreadDividerInserted = false;
 
+    if (data.hasMore) {
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: OutlinedButton.icon(
+            onPressed: _isLoadingOlderMessages
+                ? null
+                : () => _loadOlderMessages(data),
+            icon: _isLoadingOlderMessages
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.history),
+            label: const Text('Load older messages'),
+          ),
+        ),
+      );
+    }
+
     for (final message in data.messages) {
       final shouldShowUnreadDivider = !unreadDividerInserted &&
           _isUnreadMessage(message, data.lastReadMessageId);
@@ -228,12 +364,11 @@ class _ChatScreenState extends State<ChatScreen> {
       rows.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: ChatMessageBubble(
-            messageType: message.messageType,
-            isMine: message.isSentBy(data.currentUser.id),
-            content: message.content,
-            mediaUrl: message.mediaUrl,
+          child: _MessageRow(
+            message: message,
+            currentUser: data.currentUser,
             senderName: _memberNameById(data.lobby, message.senderUserId),
+            onReport: () => _reportMessage(data, message),
           ),
         ),
       );
@@ -282,13 +417,75 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+class _MessageRow extends StatelessWidget {
+  const _MessageRow({
+    required this.message,
+    required this.currentUser,
+    required this.onReport,
+    this.senderName,
+  });
+
+  final ChatMessage message;
+  final User currentUser;
+  final String? senderName;
+  final VoidCallback onReport;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMine = message.isSentBy(currentUser.id);
+    final canReport =
+        message.senderUserId != null && !isMine && !message.isSystem;
+
+    return Column(
+      crossAxisAlignment:
+          isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onLongPress: canReport
+              ? () {
+                  _showMessageActions(context);
+                }
+              : null,
+          child: ChatMessageBubble(
+            messageType: message.messageType,
+            isMine: isMine,
+            content: message.content,
+            mediaUrl: message.mediaUrl,
+            senderName: senderName,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showMessageActions(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: ListTile(
+            leading: const Icon(Icons.flag_outlined),
+            title: const Text('Report message'),
+            onTap: () {
+              Navigator.pop(context);
+              onReport();
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _ChatScreenData {
   const _ChatScreenData({
     required this.lobby,
     required this.currentUser,
     required this.messages,
     required this.canAccessChat,
+    this.hasMore = false,
     this.lastReadMessageId,
+    this.nextCursor,
   });
 
   final Lobby lobby;
@@ -296,6 +493,28 @@ class _ChatScreenData {
   final int? lastReadMessageId;
   final List<ChatMessage> messages;
   final bool canAccessChat;
+  final bool hasMore;
+  final int? nextCursor;
+
+  _ChatScreenData copyWith({
+    Lobby? lobby,
+    User? currentUser,
+    int? lastReadMessageId,
+    List<ChatMessage>? messages,
+    bool? canAccessChat,
+    bool? hasMore,
+    int? nextCursor,
+  }) {
+    return _ChatScreenData(
+      lobby: lobby ?? this.lobby,
+      currentUser: currentUser ?? this.currentUser,
+      lastReadMessageId: lastReadMessageId ?? this.lastReadMessageId,
+      messages: messages ?? this.messages,
+      canAccessChat: canAccessChat ?? this.canAccessChat,
+      hasMore: hasMore ?? this.hasMore,
+      nextCursor: nextCursor ?? this.nextCursor,
+    );
+  }
 }
 
 class _UnreadDivider extends StatelessWidget {
@@ -354,6 +573,7 @@ class _ChatInputBar extends StatelessWidget {
                 controller: controller,
                 minLines: 1,
                 maxLines: 4,
+                maxLength: ChatValidation.maxUserMessageLength,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => onSend(),
                 decoration: const InputDecoration(

@@ -1,4 +1,5 @@
 import '../core/enums.dart';
+import '../models/lobby.dart';
 import '../services/payment_service.dart';
 import 'mock_data_store.dart';
 
@@ -43,6 +44,13 @@ class MockPaymentService implements PaymentService {
 
     final allPaymentsPaid = updatedRecords.every((record) => record.isPaid);
     _store.replaceLobby(lobby.copyWith(paymentRecords: updatedRecords));
+    _store.addSystemMessage(
+      lobbyId: lobbyId,
+      eventType: 'payment.record_updated',
+      content: 'Payment from ${_memberNameById(lobby, targetRecord.userId)} '
+          'was confirmed.',
+      targetUserId: targetRecord.userId,
+    );
 
     return ConfirmPaymentResult(
       paymentRecordId: targetRecord.paymentRecordId,
@@ -55,5 +63,14 @@ class MockPaymentService implements PaymentService {
       confirmedAt: confirmedAt,
       allPaymentsPaid: allPaymentsPaid,
     );
+  }
+
+  String _memberNameById(Lobby lobby, int userId) {
+    for (final member in lobby.members) {
+      if (member.userId == userId) {
+        return member.name;
+      }
+    }
+    return 'User $userId';
   }
 }
