@@ -6,15 +6,16 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:buddies_mobile/main.dart';
+import 'package:buddies_mobile/app.dart';
 
 void main() {
+  // 앱이 최소 화면 요소를 렌더링하는지 확인하는 기본 widget test입니다.
   testWidgets('Buddies home screen renders', (WidgetTester tester) async {
     await tester.pumpWidget(const BuddiesApp());
 
     expect(find.text('Buddies'), findsOneWidget);
-    expect(find.text('Delivery Zone'), findsOneWidget);
-    expect(find.text('KAIST Campus'), findsOneWidget);
-    expect(find.text('Create Lobby'), findsOneWidget);
+    expect(find.text('KAIST email ID'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.text('Login'), findsWidgets);
   });
 }
