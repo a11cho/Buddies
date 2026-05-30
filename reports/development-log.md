@@ -1023,3 +1023,75 @@
 - `BANNED` 사용자의 로그인 또는 보호 API 접근 차단 범위 최종 확정 및 구현
 - 사용자 상세의 최근 활동 시각과 참여 로비 이력 상세 응답이 필요하면 API 확장
 - 영구 차단 해제(`BANNED → ACTIVE`)에 별도 확인 절차를 둘지 팀 결정
+
+## 2026-05-30
+
+### Host 계좌 정보 등록 및 로비 상세 응답 연동
+
+#### 목적
+
+`buddies-doc/SDD/추가.md`와 갱신된 SDD 정책에 따라 Host의 계좌 정보 등록/수정/조회 책임을 Auth 모듈에 두고, 로비 생성 및 Cart Lock 전에 Host 계좌 정보 등록 여부를 확인하며, Cart Lock 이후 로비 상세 조회에서 active Lobby member에게 Host 계좌 정보를 함께 제공하도록 백엔드와 테스트 도구를 보강했다.
+
+#### 주요 변경 사항
+
+- Auth 계좌 정보 API 추가
+  - `GET /auth/me/payment-info` 추가
+  - `PATCH /auth/me/payment-info` 추가
+  - 계좌 정보는 JWT의 현재 사용자 ID를 기준으로만 조회/수정
+  - 은행명, 계좌번호, 예금주명 필수값 검증 추가
+  - 계좌번호는 숫자, 공백, 하이픈으로 구성된 최소 형식만 허용
+
+- 계좌 정보 도메인 및 DB 추가
+  - `host_payment_infos` 테이블 추가
+  - 사용자별 계좌 정보 1개만 허용하는 unique index 추가
+  - `HostPaymentInfo` JPA Entity 추가
+  - `HostPaymentInfoRepository` 추가
+  - Flyway migration `V3__host_payment_infos.sql` 추가
+
+- Spring Security 경로 보강
+  - `/auth/me/**`를 인증 필요 경로로 확장
+  - 계좌 정보 API가 기존 Auth JWT 보호 범위 안에서 동작하도록 설정
+
+- Lobby API 연동
+  - `POST /lobbies`에서 현재 사용자의 계좌 정보가 없으면 `409 Conflict` 반환
+  - `GET /lobbies/{lobbyId}` 응답에 다음 field 추가
+    - `hostBankName`
+    - `hostAccountNumber`
+    - `hostAccountHolderName`
+  - 로비가 `WAITING`, `CANCELED`, `CLOSED`가 아닌 상태일 때 Host 계좌 정보를 응답에 포함
+  - 로비 상세 조회 시 active Lobby member 여부 확인 추가
+  - `POST /lobbies/{lobbyId}/cart/lock`에서 현재 Host 계좌 정보가 없으면 `409 Conflict` 반환
+
+- 로컬 테스트 도구 보강
+  - `buddies-doc/tools/signup-test-app`에 계좌 정보 등록/조회 카드 추가
+  - 로그인 후 발급받은 JWT로 `PATCH /auth/me/payment-info`, `GET /auth/me/payment-info`를 직접 호출 가능
+  - 테스트 도구 제목을 회원가입/로그인/비밀번호 재설정/계좌 등록 흐름을 포함하도록 수정
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthController.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthService.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/domain/HostPaymentInfo.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/domain/HostPaymentInfoRepository.java`
+- `backend/src/main/java/kr/kaist/buddies/config/SecurityConfig.java`
+- `backend/src/main/java/kr/kaist/buddies/lobby/LobbyController.java`
+- `backend/src/main/java/kr/kaist/buddies/lobby/LobbyService.java`
+- `backend/src/main/resources/db/migration/V3__host_payment_infos.sql`
+- `buddies-doc/tools/signup-test-app/index.html`
+- `buddies-doc/tools/signup-test-app/app.js`
+- `reports/development-log.md`
+
+#### 검증
+
+- `git diff --check` 성공
+- `rg`로 `payment-info`, `host_payment_infos`, `hostBankName` 적용 위치 확인
+- 현재 환경에는 `mvnw`와 `mvn` 명령이 없어 Maven build/test는 수행하지 못했다.
+- 계좌 등록 테스트 도구는 정적 HTML/JS 수정이므로 별도 빌드 없이 기존 `server.js`로 실행 가능하다.
+
+#### 남은 작업
+
+- Maven wrapper 추가 또는 Maven 설치 후 backend compile/test 실행
+- 실제 DB migration 적용 후 계좌 정보 저장/조회 end-to-end 확인
+- Lobby 모듈의 placeholder 로직을 실제 service/repository 기반 구현으로 확장
+- Cart Locking 시 요청자가 실제 Host인지 검증하는 기존 Lobby 권한 로직과 계좌 정보 검증을 통합
+- Mobile app에 계좌 정보 등록 화면과 Lobby detail 결제 섹션 UI 연결
