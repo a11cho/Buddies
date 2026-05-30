@@ -1,7 +1,9 @@
 import '../core/enums.dart';
 import '../models/cart_item.dart';
+import '../models/host_payment_info.dart';
 import '../models/lobby.dart';
 import '../models/lobby_member.dart';
+import '../models/payment_record.dart';
 import '../services/lobby_service.dart';
 import 'mock_data_store.dart';
 
@@ -22,13 +24,48 @@ class MockLobbyService implements LobbyService {
           lobby.restaurantName
               .toLowerCase()
               .contains(restaurantName.toLowerCase());
-      return matchesDeliveryZone && matchesRestaurantName;
+      return _isSearchVisibleLobby(lobby) &&
+          matchesDeliveryZone &&
+          matchesRestaurantName;
+    }).toList();
+  }
+
+  @override
+  Future<Lobby?> getMyActiveLobby() async {
+    for (final lobby in _store.lobbies) {
+      if (_isCurrentUserInActiveLobby(lobby)) {
+        return lobby;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<List<Lobby>> getMyLobbies() async {
+    return _store.lobbies.where((lobby) {
+      return lobby.members.any(
+        (member) => member.userId == _store.currentUser.id,
+      );
     }).toList();
   }
 
   @override
   Future<Lobby> getLobbyDetail(int lobbyId) async {
-    return _store.findLobby(lobbyId);
+    final lobby = _store.findLobby(lobbyId);
+    if (!_shouldExposeHostPaymentInfo(lobby)) {
+      return lobby;
+    }
+
+    final HostPaymentInfo? paymentInfo =
+        _store.paymentInfoByUserId[lobby.hostUserId];
+    if (paymentInfo == null || !paymentInfo.isComplete) {
+      return lobby;
+    }
+    return lobby.copyWith(
+      hostBankName: paymentInfo.bankName,
+      hostAccountNumber: paymentInfo.accountNumber,
+      hostAccountHolderName: paymentInfo.accountHolderName,
+    );
   }
 
   @override
@@ -37,6 +74,10 @@ class MockLobbyService implements LobbyService {
       throw StateError(
         'You cannot create a Lobby while you are in an active Lobby.',
       );
+    }
+    final paymentInfo = _store.paymentInfoByUserId[_store.currentUser.id];
+    if (paymentInfo == null || !paymentInfo.isComplete) {
+      throw StateError('Register payment info before creating a Lobby.');
     }
 
     final newLobby = Lobby(
@@ -124,6 +165,24 @@ class MockLobbyService implements LobbyService {
     if (!isActiveStatus) {
       return false;
     }
+    return lobby.members.any(
+      (member) => member.userId == _store.currentUser.id && member.isActive,
+    );
+  }
+
+  bool _isSearchVisibleLobby(Lobby lobby) {
+    return lobby.orderStatus == LobbyStatus.waiting &&
+        lobby.cartLockedAt == null;
+  }
+
+  bool _shouldExposeHostPaymentInfo(Lobby lobby) {
+    final canExposeByStatus = lobby.orderStatus != LobbyStatus.waiting &&
+        lobby.orderStatus != LobbyStatus.closed &&
+        lobby.orderStatus != LobbyStatus.canceled;
+    if (!canExposeByStatus) {
+      return false;
+    }
+
     return lobby.members.any(
       (member) => member.userId == _store.currentUser.id && member.isActive,
     );
@@ -242,19 +301,38 @@ class MockLobbyService implements LobbyService {
       throw StateError('Target member is already the Host.');
     }
 
+    final transferredAt = DateTime.now();
     final updatedMembers = lobby.members.map((member) {
       if (member.userId == _store.currentUser.id) {
-        return member.copyWith(roleInLobby: RoleInLobby.participant);
+        return member.copyWith(
+          membershipStatus: MembershipStatus.removedByTransfer,
+          leftAt: transferredAt,
+        );
       }
       if (member.userId == targetUserId) {
         return member.copyWith(roleInLobby: RoleInLobby.host);
       }
       return member;
     }).toList();
+    final updatedItems = lobby.cartItems
+        .where((item) => item.ownerUserId != _store.currentUser.id)
+        .toList();
+    final updatedTotal = _calculateCurrentTotal(updatedItems);
     final updatedLobby = lobby.copyWith(
       hostUserId: targetMember.userId,
       hostName: targetMember.name,
       members: updatedMembers,
+      cartItems: updatedItems,
+      currentTotalAmount: updatedTotal,
+      remainingAmount: _calculateRemaining(
+        lobby.minimumOrderAmount,
+        updatedTotal,
+      ),
+      paymentRecords: lobby.paymentRecords
+          .where((record) => record.userId != _store.currentUser.id)
+          .toList(),
+      participantCount:
+          updatedMembers.where((member) => member.isActive).length,
     );
 
     _store.replaceLobby(updatedLobby);
@@ -274,8 +352,9 @@ class MockLobbyService implements LobbyService {
     if (lobby.hostUserId != _store.currentUser.id) {
       throw StateError('Only the Host can kick Participants.');
     }
-    if (lobby.orderStatus != LobbyStatus.waiting) {
-      throw StateError('Participants can only be kicked while WAITING.');
+    if (lobby.orderStatus != LobbyStatus.waiting &&
+        lobby.orderStatus != LobbyStatus.locked) {
+      throw StateError('Participants can only be kicked before order placed.');
     }
     if (userId == lobby.hostUserId) {
       throw StateError('The Host cannot be kicked.');
@@ -307,6 +386,17 @@ class MockLobbyService implements LobbyService {
         .where((item) => item.ownerUserId != userId)
         .toList();
     final updatedTotal = _calculateCurrentTotal(updatedItems);
+    final activeMembers =
+        updatedMembers.where((member) => member.isActive).toList();
+    final updatedPaymentRecords = lobby.orderStatus == LobbyStatus.locked
+        ? _rebuildPaymentRecords(
+            lobby: lobby,
+            activeMembers: activeMembers,
+            activeItems: updatedItems,
+          )
+        : lobby.paymentRecords
+            .where((record) => record.userId != userId)
+            .toList();
     final updatedLobby = lobby.copyWith(
       members: updatedMembers,
       cartItems: updatedItems,
@@ -315,8 +405,8 @@ class MockLobbyService implements LobbyService {
         lobby.minimumOrderAmount,
         updatedTotal,
       ),
-      participantCount:
-          updatedMembers.where((member) => member.isActive).length,
+      paymentRecords: updatedPaymentRecords,
+      participantCount: activeMembers.length,
     );
     _store.replaceLobby(updatedLobby);
     _store.addSystemMessage(
@@ -360,6 +450,43 @@ class MockLobbyService implements LobbyService {
     };
 
     return allowedTransitions[currentStatus] == newStatus;
+  }
+
+  List<PaymentRecord> _rebuildPaymentRecords({
+    required Lobby lobby,
+    required List<LobbyMember> activeMembers,
+    required List<CartItem> activeItems,
+  }) {
+    final memberCount = activeMembers.isEmpty ? 1 : activeMembers.length;
+    final deliveryShare = lobby.deliveryFee ~/ memberCount;
+
+    return activeMembers.map((member) {
+      final previousRecord = _paymentRecordFor(lobby, member.userId);
+      final itemTotal = activeItems
+          .where((item) => item.ownerUserId == member.userId)
+          .fold(0, (sum, item) => sum + item.subtotal);
+      final isHost = member.userId == lobby.hostUserId;
+
+      return PaymentRecord(
+        paymentRecordId:
+            previousRecord?.paymentRecordId ?? _store.nextPaymentRecordId++,
+        lobbyId: lobby.lobbyId,
+        userId: member.userId,
+        amount: itemTotal + deliveryShare,
+        status: isHost ? PaymentStatus.paid : PaymentStatus.unpaid,
+        confirmedByHostId: isHost ? lobby.hostUserId : null,
+        confirmedAt: isHost ? DateTime.now() : null,
+      );
+    }).toList();
+  }
+
+  PaymentRecord? _paymentRecordFor(Lobby lobby, int userId) {
+    for (final record in lobby.paymentRecords) {
+      if (record.userId == userId) {
+        return record;
+      }
+    }
+    return null;
   }
 
   int _calculateCurrentTotal(List<CartItem> items) {

@@ -40,7 +40,7 @@ class _SupportTicketScreenState extends State<SupportTicketScreen> {
 
   Future<List<_LobbyOption>> _loadLobbyOptions() async {
     final currentUser = await AppServices.userService.getMe();
-    final lobbies = await AppServices.lobbyService.getLobbies();
+    final lobbies = await AppServices.lobbyService.getMyLobbies();
     final options = lobbies
         .where(
           (lobby) => lobby.members.any(

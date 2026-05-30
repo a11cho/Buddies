@@ -1,4 +1,5 @@
 import '../core/enums.dart';
+import '../models/host_payment_info.dart';
 import '../models/order_history_item.dart';
 import '../models/user.dart';
 import '../services/user_service.dart';
@@ -27,6 +28,34 @@ class MockUserService implements UserService {
     _store.currentUser = updatedUser;
     _syncCurrentUserNameToLobbies(name);
     return updatedUser;
+  }
+
+  @override
+  Future<HostPaymentInfo?> getPaymentInfo() async {
+    return _store.paymentInfoByUserId[_store.currentUser.id];
+  }
+
+  @override
+  Future<HostPaymentInfo> updatePaymentInfo(
+    UpdatePaymentInfoRequest request,
+  ) async {
+    final bankName = request.bankName.trim();
+    final accountNumber = request.accountNumber.trim();
+    final accountHolderName = request.accountHolderName.trim();
+    if (bankName.isEmpty ||
+        accountNumber.isEmpty ||
+        accountHolderName.isEmpty) {
+      throw StateError('Bank, account number, and holder name are required.');
+    }
+
+    final paymentInfo = HostPaymentInfo(
+      bankName: bankName,
+      accountNumber: accountNumber,
+      accountHolderName: accountHolderName,
+      updatedAt: DateTime.now(),
+    );
+    _store.paymentInfoByUserId[_store.currentUser.id] = paymentInfo;
+    return paymentInfo;
   }
 
   @override

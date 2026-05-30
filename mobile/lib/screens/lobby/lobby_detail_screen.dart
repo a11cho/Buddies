@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/app_routes.dart';
 import '../../core/enums.dart';
@@ -6,6 +7,7 @@ import '../../core/service_registry.dart';
 import '../../models/cart_item.dart';
 import '../../models/lobby.dart';
 import '../../models/lobby_member.dart';
+import '../../models/payment_record.dart';
 import '../../models/user.dart';
 import '../../services/cart_service.dart';
 import '../../widgets/app_scaffold.dart';
@@ -57,14 +59,11 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
   Future<_LobbyDetailData> _loadDetail(int lobbyId) async {
     final user = await AppServices.authService.getMe();
     final lobby = await AppServices.lobbyService.getLobbyDetail(lobbyId);
-    final allLobbies = await AppServices.lobbyService.getLobbies();
-    final isInActiveLobby = allLobbies.any(
-      (candidate) => _isCurrentUserInActiveLobby(candidate, user.id),
-    );
+    final myActiveLobby = await AppServices.lobbyService.getMyActiveLobby();
     final data = _LobbyDetailData(
       lobby: lobby,
       currentUser: user,
-      isInActiveLobby: isInActiveLobby,
+      isInActiveLobby: myActiveLobby != null,
     );
     _cachedDetailData = data;
     return data;
@@ -385,14 +384,16 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
   }
 
   Future<void> _kickMember(Lobby lobby, LobbyMember member) async {
+    final message = lobby.orderStatus == LobbyStatus.locked
+        ? 'Kick ${member.name}? Their payment record will be removed and '
+            'amounts will be recalculated.'
+        : 'Kick ${member.name}? Their cart items will be removed.';
     final shouldKick = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: const Text('Kick participant'),
-          content: Text(
-            'Kick ${member.name}? Their cart items will be removed.',
-          ),
+          content: Text(message),
           actions: [
             TextButton(
               onPressed: () {
@@ -539,6 +540,33 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
     }
   }
 
+  Future<void> _copyHostAccountNumber(Lobby lobby) async {
+    final accountNumber = lobby.hostAccountNumber;
+    if (accountNumber == null || accountNumber.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Host account number is unavailable.')),
+      );
+      return;
+    }
+
+    try {
+      await Clipboard.setData(ClipboardData(text: accountNumber));
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Account number copied.')),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not copy account number.')),
+      );
+    }
+  }
+
   Future<void> _updateLobbyStatus(Lobby lobby, String newStatus) async {
     setState(() {
       _isUpdatingStatus = true;
@@ -624,7 +652,9 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
           final shouldShowLockCart =
               isHost && lobby.orderStatus == LobbyStatus.waiting;
           final canKickMembers =
-              isHost && lobby.orderStatus == LobbyStatus.waiting;
+              isHost &&
+              (lobby.orderStatus == LobbyStatus.waiting ||
+                  lobby.orderStatus == LobbyStatus.locked);
           final canTransferHost =
               isHost && lobby.orderStatus == LobbyStatus.waiting;
           final memberActionInProgress =
@@ -635,6 +665,15 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
           final lockDisabledReason = shouldShowLockCart && !canLockCart
               ? 'Minimum order amount has not been reached.'
               : null;
+          final myPaymentRecord = _paymentRecordFor(
+            lobby,
+            data.currentUser.id,
+          );
+          final shouldShowTransferInfo = _shouldShowTransferInfo(
+            lobby,
+            isMember,
+            isHost,
+          );
           final statusAction = _statusActionFor(lobby);
 
           return ListView(
@@ -760,11 +799,11 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                 ),
               ],
               const SizedBox(height: 16),
-              const _SectionHeader(title: 'Payment Records'),
+              _SectionHeader(title: isHost ? 'Payment Records' : 'My Payment'),
               const SizedBox(height: 8),
               if (lobby.paymentRecords.isEmpty)
                 const _MutedText('Payment records will appear after cart lock.')
-              else
+              else if (isHost) ...[
                 for (final record in lobby.paymentRecords)
                   PaymentRecordTile(
                     userName: _memberNameById(lobby, record.userId),
@@ -779,6 +818,22 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                       record.paymentRecordId,
                     ),
                   ),
+              ]
+              else if (myPaymentRecord == null)
+                const _MutedText('My payment record is not available.')
+              else
+                PaymentRecordTile(
+                  userName: _memberNameById(lobby, myPaymentRecord.userId),
+                  amount: myPaymentRecord.amount,
+                  status: myPaymentRecord.status,
+                ),
+              if (shouldShowTransferInfo) ...[
+                const SizedBox(height: 12),
+                _HostPaymentInfoPanel(
+                  lobby: lobby,
+                  onCopyAccountNumber: () => _copyHostAccountNumber(lobby),
+                ),
+              ],
               if (isHost && statusAction != null) ...[
                 const SizedBox(height: 16),
                 _LobbyStatusAction(
@@ -811,15 +866,6 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
     return lobby.members.any(
       (member) => member.userId == currentUserId && member.isActive,
     );
-  }
-
-  bool _isCurrentUserInActiveLobby(Lobby lobby, int currentUserId) {
-    final isActiveStatus = lobby.orderStatus != LobbyStatus.closed &&
-        lobby.orderStatus != LobbyStatus.canceled;
-    if (!isActiveStatus) {
-      return false;
-    }
-    return _isActiveMember(lobby, currentUserId);
   }
 
   List<LobbyMember> _visibleMembers(Lobby lobby) {
@@ -856,6 +902,28 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       }
     }
     return 'User $userId';
+  }
+
+  PaymentRecord? _paymentRecordFor(Lobby lobby, int userId) {
+    for (final record in lobby.paymentRecords) {
+      if (record.userId == userId) {
+        return record;
+      }
+    }
+    return null;
+  }
+
+  bool _shouldShowTransferInfo(
+    Lobby lobby,
+    bool isMember,
+    bool isHost,
+  ) {
+    if (!isMember || isHost) {
+      return false;
+    }
+    return lobby.orderStatus != LobbyStatus.waiting &&
+        lobby.orderStatus != LobbyStatus.closed &&
+        lobby.orderStatus != LobbyStatus.canceled;
   }
 
   _LobbyStatusActionData? _statusActionFor(Lobby lobby) {
@@ -978,6 +1046,107 @@ class _MutedText extends StatelessWidget {
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.outline,
             ),
+      ),
+    );
+  }
+}
+
+class _HostPaymentInfoPanel extends StatelessWidget {
+  const _HostPaymentInfoPanel({
+    required this.lobby,
+    required this.onCopyAccountNumber,
+  });
+
+  final Lobby lobby;
+  final VoidCallback onCopyAccountNumber;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!lobby.hasHostPaymentInfo) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).colorScheme.outline),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.info_outline),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text('Host has not registered payment info yet.'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Host Transfer Account',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          _PaymentInfoRow(label: 'Bank', value: lobby.hostBankName!),
+          _PaymentInfoRow(
+            label: 'Holder',
+            value: lobby.hostAccountHolderName!,
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _PaymentInfoRow(
+                  label: 'Account',
+                  value: lobby.hostAccountNumber!,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Copy account number',
+                onPressed: onCopyAccountNumber,
+                icon: const Icon(Icons.copy),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentInfoRow extends StatelessWidget {
+  const _PaymentInfoRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 76,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
       ),
     );
   }

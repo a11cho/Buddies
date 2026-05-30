@@ -30,6 +30,10 @@ abstract class LobbyService {
     String? restaurantName,
   });
 
+  Future<Lobby?> getMyActiveLobby();
+
+  Future<List<Lobby>> getMyLobbies();
+
   Future<Lobby> getLobbyDetail(int lobbyId);
 
   Future<Lobby> createLobby(CreateLobbyRequest request);

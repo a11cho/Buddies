@@ -69,6 +69,26 @@ class MockChatService implements ChatService {
     return message;
   }
 
+  @override
+  Future<ChatMessage> sendMediaMessage(int lobbyId, String mediaUrl) async {
+    final lobby = _store.findLobby(lobbyId);
+    _ensureCurrentUserIsActiveMember(lobby);
+    _validateMediaMessage(lobbyId, mediaUrl);
+
+    final message = ChatMessage(
+      id: _store.nextMessageId++,
+      lobbyId: lobbyId,
+      senderUserId: _store.currentUser.id,
+      messageType: ChatMessageType.media,
+      mediaUrl: mediaUrl.trim(),
+      createdAt: DateTime.now(),
+    );
+    _store.findMessages(lobbyId).add(message);
+    _recordUserMessage(lobbyId);
+    await markAsRead(lobbyId, message.id);
+    return message;
+  }
+
   void _validateUserMessage(int lobbyId, String content) {
     final trimmedContent = content.trim();
     if (trimmedContent.isEmpty) {
@@ -86,6 +106,19 @@ class MockChatService implements ChatService {
     );
     if (hasRestrictedKeyword) {
       throw StateError('RESTRICTED_KEYWORD');
+    }
+    if (_isRateLimited(lobbyId)) {
+      throw StateError('RATE_LIMITED');
+    }
+  }
+
+  void _validateMediaMessage(int lobbyId, String mediaUrl) {
+    final trimmedMediaUrl = mediaUrl.trim();
+    if (trimmedMediaUrl.isEmpty) {
+      throw StateError('Media attachment is required.');
+    }
+    if (_store.currentUser.status != UserStatus.active) {
+      throw StateError('ACCOUNT_RESTRICTED');
     }
     if (_isRateLimited(lobbyId)) {
       throw StateError('RATE_LIMITED');

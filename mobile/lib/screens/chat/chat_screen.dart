@@ -136,19 +136,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (currentData == null) {
         _refreshChat();
       } else {
-        final nextMessages = _mergeMessages(
-          olderMessages: currentData.messages,
-          currentMessages: [sentMessage],
-        );
-        final nextData = currentData.copyWith(
-          messages: nextMessages,
-          lastReadMessageId: sentMessage.id,
-        );
-        setState(() {
-          _chatData = nextData;
-          _chatFuture = SynchronousFuture(nextData);
-        });
-        _scrollToBottom();
+        _appendSentMessage(currentData, sentMessage);
       }
     } catch (error) {
       if (!mounted) {
@@ -164,6 +152,107 @@ class _ChatScreenState extends State<ChatScreen> {
         });
       }
     }
+  }
+
+  Future<void> _attachMedia() async {
+    final lobbyId = _lobbyId;
+    if (lobbyId == null || _isSending) {
+      return;
+    }
+
+    final mediaUrl = await _chooseMockPhoto();
+    if (mediaUrl == null || !mounted) {
+      return;
+    }
+
+    final currentData = _chatData;
+    setState(() {
+      _isSending = true;
+    });
+
+    try {
+      final sentMessage = await AppServices.chatService.sendMediaMessage(
+        lobbyId,
+        mediaUrl,
+      );
+      if (!mounted) {
+        return;
+      }
+      if (currentData == null) {
+        _refreshChat();
+      } else {
+        _appendSentMessage(currentData, sentMessage);
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
+    }
+  }
+
+  Future<String?> _chooseMockPhoto() {
+    return showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Attach photo',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                for (final option in _mockChatPhotoOptions)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.image_outlined),
+                    ),
+                    title: Text(option.label),
+                    subtitle: Text(option.fileName),
+                    onTap: () {
+                      Navigator.pop(context, option.mediaUrl);
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _appendSentMessage(
+    _ChatScreenData currentData,
+    ChatMessage sentMessage,
+  ) {
+    final nextMessages = _mergeMessages(
+      olderMessages: currentData.messages,
+      currentMessages: [sentMessage],
+    );
+    final nextData = currentData.copyWith(
+      messages: nextMessages,
+      lastReadMessageId: sentMessage.id,
+    );
+    setState(() {
+      _chatData = nextData;
+      _chatFuture = SynchronousFuture(nextData);
+    });
+    _scrollToBottom();
   }
 
   Future<void> _loadOlderMessages(_ChatScreenData data) async {
@@ -320,6 +409,7 @@ class _ChatScreenState extends State<ChatScreen> {
               _ChatInputBar(
                 controller: _messageController,
                 isSending: _isSending,
+                onAttachMedia: _attachMedia,
                 onSend: _sendMessage,
               ),
             ],
@@ -547,11 +637,13 @@ class _ChatInputBar extends StatelessWidget {
   const _ChatInputBar({
     required this.controller,
     required this.isSending,
+    required this.onAttachMedia,
     required this.onSend,
   });
 
   final TextEditingController controller;
   final bool isSending;
+  final VoidCallback onAttachMedia;
   final VoidCallback onSend;
 
   @override
@@ -566,20 +658,36 @@ class _ChatInputBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            IconButton(
+              tooltip: 'Attach photo',
+              onPressed: isSending ? null : onAttachMedia,
+              style: IconButton.styleFrom(
+                fixedSize: const Size.square(44),
+                padding: EdgeInsets.zero,
+              ),
+              icon: const Icon(Icons.photo_library_outlined),
+            ),
+            const SizedBox(width: 8),
             Expanded(
               child: TextField(
                 controller: controller,
                 minLines: 1,
                 maxLines: 4,
                 maxLength: ChatValidation.maxUserMessageLength,
+                textAlignVertical: TextAlignVertical.center,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => onSend(),
                 decoration: const InputDecoration(
                   hintText: 'Message',
                   border: OutlineInputBorder(),
                   isDense: true,
+                  counterText: '',
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
               ),
             ),
@@ -587,6 +695,10 @@ class _ChatInputBar extends StatelessWidget {
             IconButton.filled(
               tooltip: 'Send',
               onPressed: isSending ? null : onSend,
+              style: IconButton.styleFrom(
+                fixedSize: const Size.square(44),
+                padding: EdgeInsets.zero,
+              ),
               icon: isSending
                   ? const SizedBox.square(
                       dimension: 18,
@@ -599,4 +711,34 @@ class _ChatInputBar extends StatelessWidget {
       ),
     );
   }
+}
+
+const List<_MockChatPhotoOption> _mockChatPhotoOptions = [
+  _MockChatPhotoOption(
+    label: 'Menu photo',
+    fileName: 'menu_photo.jpg',
+    mediaUrl: 'mock-media://menu_photo.jpg',
+  ),
+  _MockChatPhotoOption(
+    label: 'Receipt photo',
+    fileName: 'receipt_photo.jpg',
+    mediaUrl: 'mock-media://receipt_photo.jpg',
+  ),
+  _MockChatPhotoOption(
+    label: 'Delivery spot photo',
+    fileName: 'delivery_spot_photo.jpg',
+    mediaUrl: 'mock-media://delivery_spot_photo.jpg',
+  ),
+];
+
+class _MockChatPhotoOption {
+  const _MockChatPhotoOption({
+    required this.label,
+    required this.fileName,
+    required this.mediaUrl,
+  });
+
+  final String label;
+  final String fileName;
+  final String mediaUrl;
 }

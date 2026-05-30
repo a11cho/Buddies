@@ -1,6 +1,7 @@
 import '../core/enums.dart';
 import '../models/cart_item.dart';
 import '../models/chat_message.dart';
+import '../models/host_payment_info.dart';
 import '../models/lobby.dart';
 import '../models/lobby_member.dart';
 import '../models/payment_record.dart';
@@ -15,6 +16,41 @@ const mockCurrentUser = User(
   trustScore: 4.6,
   status: UserStatus.active,
 );
+
+Map<int, HostPaymentInfo> createInitialMockPaymentInfoByUserId() {
+  return {
+    3: HostPaymentInfo(
+      bankName: 'KakaoBank',
+      accountNumber: '3333-03-1234567',
+      accountHolderName: 'Example User',
+      updatedAt: DateTime(2026, 5, 7, 8, 20),
+    ),
+    4: HostPaymentInfo(
+      bankName: 'KakaoBank',
+      accountNumber: '3333-44-7654321',
+      accountHolderName: 'Doyun',
+      updatedAt: DateTime(2026, 5, 7, 8, 25),
+    ),
+    5: HostPaymentInfo(
+      bankName: 'WooriBank',
+      accountNumber: '1002-555-123456',
+      accountHolderName: 'Mina',
+      updatedAt: DateTime(2026, 5, 1, 18, 30),
+    ),
+    9: HostPaymentInfo(
+      bankName: 'TossBank',
+      accountNumber: '1908-9000-1234',
+      accountHolderName: 'Sora',
+      updatedAt: DateTime(2026, 5, 2, 14, 10),
+    ),
+    14: HostPaymentInfo(
+      bankName: 'ShinhanBank',
+      accountNumber: '110-123-456789',
+      accountHolderName: 'Jisoo',
+      updatedAt: DateTime(2026, 5, 3, 10, 5),
+    ),
+  };
+}
 
 // 백엔드 없이 LobbyListScreen을 확인하기 위한 임시 데이터입니다.
 // Phase 3부터는 실제 Lobby model과 같은 구조를 사용합니다.
@@ -112,9 +148,9 @@ List<Lobby> createInitialMockLobbies() {
   return [
     Lobby(
       lobbyId: 10,
-      hostUserId: mockCurrentUser.id,
-      hostName: mockCurrentUser.name,
-      hostTrustScore: mockCurrentUser.trustScore,
+      hostUserId: 3,
+      hostName: 'Example User',
+      hostTrustScore: 4.6,
       restaurantName: 'MOM\'S TOUCH',
       deliveryZone: DeliveryZone.n3,
       minimumOrderAmount: 23000,
@@ -122,7 +158,8 @@ List<Lobby> createInitialMockLobbies() {
       remainingAmount: _remainingAmount(23000, momsTouchCartItems),
       deliveryFee: 3000,
       participantCount: 3,
-      orderStatus: LobbyStatus.waiting,
+      orderStatus: LobbyStatus.locked,
+      cartLockedAt: DateTime(2026, 5, 7, 8, 35),
       lastReadMessageId: 1052,
       unreadCount: 1,
       members: const [
@@ -149,7 +186,46 @@ List<Lobby> createInitialMockLobbies() {
         ),
       ],
       cartItems: momsTouchCartItems,
-      paymentRecords: const [],
+      paymentRecords: [
+        PaymentRecord(
+          paymentRecordId: 101,
+          lobbyId: 10,
+          userId: 3,
+          amount: _paymentAmount(
+            cartItems: momsTouchCartItems,
+            userId: 3,
+            deliveryFee: 3000,
+            memberCount: 3,
+          ),
+          status: PaymentStatus.paid,
+          confirmedByHostId: 3,
+          confirmedAt: DateTime(2026, 5, 7, 8, 35),
+        ),
+        PaymentRecord(
+          paymentRecordId: 102,
+          lobbyId: 10,
+          userId: 4,
+          amount: _paymentAmount(
+            cartItems: momsTouchCartItems,
+            userId: 4,
+            deliveryFee: 3000,
+            memberCount: 3,
+          ),
+          status: PaymentStatus.unpaid,
+        ),
+        PaymentRecord(
+          paymentRecordId: 103,
+          lobbyId: 10,
+          userId: 7,
+          amount: _paymentAmount(
+            cartItems: momsTouchCartItems,
+            userId: 7,
+            deliveryFee: 3000,
+            memberCount: 3,
+          ),
+          status: PaymentStatus.unpaid,
+        ),
+      ],
     ),
     Lobby(
       lobbyId: 11,

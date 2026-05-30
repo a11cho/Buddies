@@ -81,15 +81,54 @@ class _MediaPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final label = _mediaLabel(mediaUrl);
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Icon(Icons.image_outlined),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: colorScheme.outlineVariant),
+          ),
+          child: const SizedBox.square(
+            dimension: 40,
+            child: Icon(Icons.image_outlined, size: 22),
+          ),
+        ),
         const SizedBox(width: 8),
         Flexible(
-          child: Text(mediaUrl ?? 'Media'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Photo attachment',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              if (label != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ],
+          ),
         ),
       ],
     );
+  }
+
+  String? _mediaLabel(String? value) {
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    final normalized = value.replaceFirst('mock-media://', '');
+    return normalized.split('/').last;
   }
 }

@@ -37,5 +37,7 @@ abstract class ChatService {
 
   Future<ChatMessage> sendMessage(int lobbyId, String content);
 
+  Future<ChatMessage> sendMediaMessage(int lobbyId, String mediaUrl);
+
   Future<void> markAsRead(int lobbyId, int messageId);
 }

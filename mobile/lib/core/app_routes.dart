@@ -13,6 +13,7 @@ import '../screens/lobby/lobby_detail_screen.dart';
 import '../screens/lobby/lobby_list_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
 import '../screens/profile/order_history_screen.dart';
+import '../screens/profile/payment_settings_screen.dart';
 import '../screens/profile/profile_screen.dart';
 
 // 화면 이동에 사용하는 route 이름을 한 곳에서 관리합니다.
@@ -31,6 +32,7 @@ class AppRoutes {
   static const chat = '/lobbies/chat';
   static const profile = '/profile';
   static const editProfile = '/profile/edit';
+  static const paymentSettings = '/profile/payment-settings';
   static const orderHistory = '/profile/order-history';
   static const help = '/help';
   static const supportTicket = '/support/tickets';
@@ -52,6 +54,7 @@ Map<String, WidgetBuilder> buildAppRoutes() {
     AppRoutes.chat: (_) => const ChatScreen(),
     AppRoutes.profile: (_) => const ProfileScreen(),
     AppRoutes.editProfile: (_) => const EditProfileScreen(),
+    AppRoutes.paymentSettings: (_) => const PaymentSettingsScreen(),
     AppRoutes.orderHistory: (_) => const OrderHistoryScreen(),
     AppRoutes.help: (_) => const HelpScreen(),
     AppRoutes.supportTicket: (_) => const SupportTicketScreen(),

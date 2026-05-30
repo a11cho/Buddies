@@ -80,6 +80,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.paymentSettings);
+                },
+                icon: const Icon(Icons.account_balance_outlined),
+                label: const Text('Payment Settings'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () {
                   Navigator.pushNamed(context, AppRoutes.orderHistory);
                 },
                 icon: const Icon(Icons.history),

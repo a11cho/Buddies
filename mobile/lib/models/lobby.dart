@@ -22,6 +22,9 @@ class Lobby {
     required this.paymentRecords,
     this.hostName,
     this.hostTrustScore,
+    this.hostBankName,
+    this.hostAccountNumber,
+    this.hostAccountHolderName,
     this.participantCount,
     this.cartLockedAt,
     this.lastReadMessageId,
@@ -32,6 +35,9 @@ class Lobby {
   final int hostUserId;
   final String? hostName;
   final double? hostTrustScore;
+  final String? hostBankName;
+  final String? hostAccountNumber;
+  final String? hostAccountHolderName;
   final String restaurantName;
   final String deliveryZone;
   final int minimumOrderAmount;
@@ -50,17 +56,26 @@ class Lobby {
   bool get canEditCart =>
       orderStatus == LobbyStatus.waiting && cartLockedAt == null;
 
-  bool get canJoin => orderStatus == LobbyStatus.waiting;
+  bool get canJoin =>
+      orderStatus == LobbyStatus.waiting && cartLockedAt == null;
 
   bool get allPaymentsPaid =>
       paymentRecords.isNotEmpty &&
       paymentRecords.every((record) => record.isPaid);
+
+  bool get hasHostPaymentInfo =>
+      hostBankName?.trim().isNotEmpty == true &&
+      hostAccountNumber?.trim().isNotEmpty == true &&
+      hostAccountHolderName?.trim().isNotEmpty == true;
 
   Lobby copyWith({
     int? lobbyId,
     int? hostUserId,
     String? hostName,
     double? hostTrustScore,
+    String? hostBankName,
+    String? hostAccountNumber,
+    String? hostAccountHolderName,
     String? restaurantName,
     String? deliveryZone,
     int? minimumOrderAmount,
@@ -81,6 +96,10 @@ class Lobby {
       hostUserId: hostUserId ?? this.hostUserId,
       hostName: hostName ?? this.hostName,
       hostTrustScore: hostTrustScore ?? this.hostTrustScore,
+      hostBankName: hostBankName ?? this.hostBankName,
+      hostAccountNumber: hostAccountNumber ?? this.hostAccountNumber,
+      hostAccountHolderName:
+          hostAccountHolderName ?? this.hostAccountHolderName,
       restaurantName: restaurantName ?? this.restaurantName,
       deliveryZone: deliveryZone ?? this.deliveryZone,
       minimumOrderAmount: minimumOrderAmount ?? this.minimumOrderAmount,
@@ -112,6 +131,9 @@ class Lobby {
       hostTrustScore: json['hostTrustScore'] == null
           ? null
           : parseJsonDouble(json['hostTrustScore'], 'hostTrustScore'),
+      hostBankName: json['hostBankName'] as String?,
+      hostAccountNumber: json['hostAccountNumber'] as String?,
+      hostAccountHolderName: json['hostAccountHolderName'] as String?,
       restaurantName: json['restaurantName'] as String? ?? '',
       deliveryZone: json['deliveryZone'] as String? ?? '',
       minimumOrderAmount: minimumOrderAmount,
@@ -140,6 +162,9 @@ class Lobby {
       'hostUserId': hostUserId,
       'hostName': hostName,
       'hostTrustScore': hostTrustScore,
+      'hostBankName': hostBankName,
+      'hostAccountNumber': hostAccountNumber,
+      'hostAccountHolderName': hostAccountHolderName,
       'restaurantName': restaurantName,
       'deliveryZone': deliveryZone,
       'minimumOrderAmount': minimumOrderAmount,

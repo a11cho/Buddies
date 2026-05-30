@@ -44,25 +44,23 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
 
   Future<_LobbyListData> _loadLobbies() async {
     final currentUser = await AppServices.authService.getMe();
-    final allLobbies = await AppServices.lobbyService.getLobbies();
+    final paymentInfo = await AppServices.userService.getPaymentInfo();
+    final myActiveLobby = await AppServices.lobbyService.getMyActiveLobby();
     final lobbies = await AppServices.lobbyService.getLobbies(
       restaurantName: _normalizeFilter(_restaurantFilterController.text),
       deliveryZone: _selectedDeliveryZoneFilter == _allDeliveryZonesFilter
           ? null
           : _selectedDeliveryZoneFilter,
     );
-    final isInActiveLobby = allLobbies.any(
-      (lobby) => _isCurrentUserInActiveLobby(lobby, currentUser.id),
-    );
     final visibleLobbies = _buildVisibleLobbies(
-      allLobbies: allLobbies,
+      myActiveLobby: myActiveLobby,
       filteredLobbies: lobbies,
-      currentUserId: currentUser.id,
     );
     return _LobbyListData(
       lobbies: visibleLobbies,
       currentUser: currentUser,
-      isInActiveLobby: isInActiveLobby,
+      isInActiveLobby: myActiveLobby != null,
+      hasPaymentInfo: paymentInfo?.isComplete == true,
     );
   }
 
@@ -83,47 +81,20 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
     return trimmed.isEmpty ? null : trimmed;
   }
 
-  bool _isCurrentUserInActiveLobby(Lobby lobby, int currentUserId) {
-    final isActiveStatus = lobby.orderStatus != LobbyStatus.closed &&
-        lobby.orderStatus != LobbyStatus.canceled;
-    if (!isActiveStatus) {
-      return false;
-    }
-    return lobby.members.any(
-      (member) => member.userId == currentUserId && member.isActive,
-    );
-  }
-
   List<Lobby> _buildVisibleLobbies({
-    required List<Lobby> allLobbies,
+    required Lobby? myActiveLobby,
     required List<Lobby> filteredLobbies,
-    required int currentUserId,
   }) {
-    Lobby? currentUserLobby;
-    for (final lobby in allLobbies) {
-      if (_isCurrentUserInActiveLobby(lobby, currentUserId)) {
-        currentUserLobby = lobby;
-        break;
-      }
+    if (myActiveLobby == null) {
+      return filteredLobbies;
     }
 
-    // Lobby list는 참가 가능한 WAITING Lobby가 기본이고,
-    // 내가 이미 참여 중인 active Lobby만 예외적으로 최상단에 유지합니다.
-    final visibleLobbies = filteredLobbies.where((lobby) {
-      final isMyActiveLobby = lobby.lobbyId == currentUserLobby?.lobbyId;
-      final isOpenLobby = lobby.orderStatus == LobbyStatus.waiting;
-      return isMyActiveLobby || isOpenLobby;
-    }).toList();
-
-    if (currentUserLobby == null) {
-      return visibleLobbies;
-    }
-
-    final otherLobbies = visibleLobbies
-        .where((lobby) => lobby.lobbyId != currentUserLobby!.lobbyId)
+    // 검색 가능한 Lobby는 WAITING만 받고, 내가 속한 active Lobby는 별도 조회로 최상단에 둡니다.
+    final otherLobbies = filteredLobbies
+        .where((lobby) => lobby.lobbyId != myActiveLobby.lobbyId)
         .toList();
     return [
-      currentUserLobby,
+      myActiveLobby,
       ...otherLobbies,
     ];
   }
@@ -167,6 +138,15 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
     }
   }
 
+  Future<void> _openProfile() async {
+    await Navigator.pushNamed(context, AppRoutes.profile);
+    if (!mounted) {
+      return;
+    }
+    // Profile 안에서 계좌 정보가 바뀔 수 있으므로 돌아오면 Create Lobby 가능 여부를 다시 계산합니다.
+    _refreshLobbies();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -174,9 +154,7 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
       actions: [
         IconButton(
           tooltip: 'Profile',
-          onPressed: () {
-            Navigator.pushNamed(context, AppRoutes.profile);
-          },
+          onPressed: _openProfile,
           icon: const Icon(Icons.person_outline),
         ),
       ],
@@ -253,19 +231,74 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
       floatingActionButton: FutureBuilder<_LobbyListData>(
         future: _lobbiesFuture,
         builder: (context, snapshot) {
-          final canCreate = snapshot.hasData && !snapshot.data!.isInActiveLobby;
-          if (!canCreate) {
-            // 이미 active Lobby에 들어가 있으면 새 Lobby 생성 진입점을 숨깁니다.
+          if (!snapshot.hasData) {
             return const SizedBox.shrink();
           }
-          return FloatingActionButton.extended(
-            onPressed: _openCreateLobby,
-            tooltip: 'Create Lobby',
-            label: const Text('Create Lobby'),
-            icon: const Icon(Icons.add),
+
+          final data = snapshot.data!;
+          final createDisabledReason = data.isInActiveLobby
+              ? 'Already in a lobby'
+              : !data.hasPaymentInfo
+                  ? 'Payment info required'
+                  : null;
+          return _CreateLobbyFab(
+            canCreate: createDisabledReason == null,
+            disabledReason: createDisabledReason,
+            onCreate: _openCreateLobby,
           );
         },
       ),
+    );
+  }
+}
+
+class _CreateLobbyFab extends StatelessWidget {
+  const _CreateLobbyFab({
+    required this.canCreate,
+    required this.onCreate,
+    this.disabledReason,
+  });
+
+  final bool canCreate;
+  final String? disabledReason;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final backgroundColor = canCreate
+        ? colorScheme.primaryContainer
+        : colorScheme.surfaceContainerHighest;
+    final foregroundColor =
+        canCreate ? colorScheme.onPrimaryContainer : colorScheme.outline;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        FloatingActionButton.extended(
+          onPressed: canCreate ? onCreate : null,
+          tooltip: disabledReason ?? 'Create Lobby',
+          backgroundColor: backgroundColor,
+          foregroundColor: foregroundColor,
+          elevation: canCreate ? 6 : 0,
+          icon: Icon(canCreate ? Icons.add : Icons.lock_outline),
+          label: const Text('Create Lobby'),
+        ),
+        if (!canCreate && disabledReason != null) ...[
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Text(
+              disabledReason!,
+              textAlign: TextAlign.right,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.outline,
+                  ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -275,11 +308,13 @@ class _LobbyListData {
     required this.lobbies,
     required this.currentUser,
     required this.isInActiveLobby,
+    required this.hasPaymentInfo,
   });
 
   final List<Lobby> lobbies;
   final User currentUser;
   final bool isInActiveLobby;
+  final bool hasPaymentInfo;
 }
 
 class _FilterSection extends StatelessWidget {

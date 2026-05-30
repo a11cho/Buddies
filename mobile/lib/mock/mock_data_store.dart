@@ -1,5 +1,6 @@
 import '../core/enums.dart';
 import '../models/chat_message.dart';
+import '../models/host_payment_info.dart';
 import '../models/lobby.dart';
 import '../models/user.dart';
 import 'mock_data.dart';
@@ -10,15 +11,20 @@ class MockDataStore {
     User currentUser = mockCurrentUser,
     List<Lobby>? initialLobbies,
     Map<int, List<ChatMessage>>? initialMessagesByLobbyId,
+    Map<int, HostPaymentInfo>? initialPaymentInfoByUserId,
   })  : currentUser = currentUser,
         lobbies = List<Lobby>.from(initialLobbies ?? createInitialMockLobbies()),
         messagesByLobbyId = (initialMessagesByLobbyId ??
                 createInitialMockMessages())
-            .map((key, value) => MapEntry(key, List<ChatMessage>.from(value)));
+            .map((key, value) => MapEntry(key, List<ChatMessage>.from(value))),
+        paymentInfoByUserId =
+            Map<int, HostPaymentInfo>.from(initialPaymentInfoByUserId ??
+                createInitialMockPaymentInfoByUserId());
 
   User currentUser;
   final List<Lobby> lobbies;
   final Map<int, List<ChatMessage>> messagesByLobbyId;
+  final Map<int, HostPaymentInfo> paymentInfoByUserId;
   final Map<String, List<DateTime>> chatSendTimestampsByLobbyUser = {};
   final Map<String, String> passwordResetTokensByEmail = {};
   final Set<String> submittedRatingKeys = {};
