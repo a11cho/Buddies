@@ -2,7 +2,6 @@ package kr.kaist.buddies.lobby;
 
 import java.time.Instant;
 import java.util.List;
-import kr.kaist.buddies.auth.AuthException;
 import kr.kaist.buddies.lobby.CartPaymentController.PaymentRecordResponse;
 import kr.kaist.buddies.lobby.domain.CartItemRepository;
 import kr.kaist.buddies.lobby.domain.Lobby;
@@ -59,12 +58,12 @@ public class PaymentService {
         Lobby lobby = findLobby(lobbyId);
         User host = requireHost(lobbyId, hostUserId);
         if (lobby.getOrderStatus() != LobbyOrderStatus.LOCKED) {
-            throw new AuthException(HttpStatus.CONFLICT, "결제 확인은 LOCKED 상태에서만 가능합니다.");
+            throw LobbyErrorCode.PAYMENT_CONFIRM_STATE_INVALID.exception(HttpStatus.CONFLICT);
         }
         PaymentRecord paymentRecord = paymentRecordRepository.findByIdAndLobby_Id(paymentRecordId, lobbyId)
-            .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "결제 기록을 찾을 수 없습니다."));
+            .orElseThrow(() -> LobbyErrorCode.PAYMENT_RECORD_NOT_FOUND.exception(HttpStatus.NOT_FOUND));
         if (paymentRecord.getStatus() == PaymentRecordStatus.INACTIVE) {
-            throw new AuthException(HttpStatus.CONFLICT, "비활성화된 결제 기록은 확인할 수 없습니다.");
+            throw LobbyErrorCode.PAYMENT_RECORD_INACTIVE.exception(HttpStatus.CONFLICT);
         }
 
         paymentRecord.markPaid(host, Instant.now());
@@ -75,7 +74,7 @@ public class PaymentService {
     @Transactional
     public void createOrRefreshForLockedLobby(Lobby lobby, Long hostUserId) {
         User host = userRepository.findById(hostUserId)
-            .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "토큰이 올바르지 않습니다."));
+            .orElseThrow(() -> LobbyErrorCode.AUTH_REQUIRED.exception(HttpStatus.UNAUTHORIZED));
         refreshActiveMemberRecords(lobby, host);
     }
 
@@ -100,7 +99,7 @@ public class PaymentService {
     private void refreshActiveMemberRecords(Lobby lobby, User host) {
         List<LobbyMembership> activeMembers = lobbyMembershipRepository.findByLobby_IdAndStatus(lobby.getId(), LobbyMembershipStatus.ACTIVE);
         if (activeMembers.isEmpty()) {
-            throw new AuthException(HttpStatus.CONFLICT, "정산할 로비 멤버가 없습니다.");
+            throw LobbyErrorCode.NO_PAYABLE_MEMBERS.exception(HttpStatus.CONFLICT);
         }
 
         long baseDeliveryShare = lobby.getDeliveryFee() / activeMembers.size();
@@ -121,15 +120,15 @@ public class PaymentService {
 
     private Lobby findLobby(Long lobbyId) {
         return lobbyRepository.findById(lobbyId)
-            .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "존재하지 않는 로비입니다."));
+            .orElseThrow(() -> LobbyErrorCode.LOBBY_NOT_FOUND.exception(HttpStatus.NOT_FOUND));
     }
 
     private User requireHost(Long lobbyId, Long userId) {
         LobbyMembership membership = lobbyMembershipRepository
             .findByLobby_IdAndUser_IdAndStatus(lobbyId, userId, LobbyMembershipStatus.ACTIVE)
-            .orElseThrow(() -> new AuthException(HttpStatus.FORBIDDEN, "해당 로비에 대한 접근 권한이 없습니다."));
+            .orElseThrow(() -> LobbyErrorCode.FORBIDDEN_ACCESS.exception(HttpStatus.FORBIDDEN));
         if (membership.getRoleInLobby() != LobbyMemberRole.HOST) {
-            throw new AuthException(HttpStatus.FORBIDDEN, "Host 권한이 필요합니다.");
+            throw LobbyErrorCode.HOST_REQUIRED.exception(HttpStatus.FORBIDDEN);
         }
         return membership.getUser();
     }
@@ -138,7 +137,7 @@ public class PaymentService {
         boolean activeMember = lobbyMembershipRepository.findByLobby_IdAndUser_IdAndStatus(lobbyId, userId, LobbyMembershipStatus.ACTIVE).isPresent();
         boolean ownsPaymentRecord = paymentRecordRepository.findByLobby_IdAndUser_Id(lobbyId, userId).isPresent();
         if (!activeMember && !ownsPaymentRecord) {
-            throw new AuthException(HttpStatus.FORBIDDEN, "정산 기록에 접근할 권한이 없습니다.");
+            throw LobbyErrorCode.PAYMENT_ACCESS_FORBIDDEN.exception(HttpStatus.FORBIDDEN);
         }
     }
 

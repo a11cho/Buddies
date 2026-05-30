@@ -13,75 +13,80 @@ public final class ChatErrorMapper {
     }
 
     public static String toCode(Throwable exception) {
-        String message = exception.getMessage() == null ? "" : exception.getMessage();
+        Throwable mapped = exception instanceof MessagingException messagingException && messagingException.getCause() != null
+            ? messagingException.getCause()
+            : exception;
+        if (mapped instanceof ChatException chatException) {
+            return chatException.error();
+        }
+        String message = mapped.getMessage() == null ? "" : mapped.getMessage();
         if (message.contains("500자")) {
-            return "MESSAGE_TOO_LONG";
+            return ChatErrorCode.MESSAGE_TOO_LONG.code();
         }
         if (message.contains("제한된 표현")) {
-            return "RESTRICTED_KEYWORD";
+            return ChatErrorCode.RESTRICTED_KEYWORD.code();
         }
         if (message.contains("메시지 타입")) {
-            return "INVALID_MESSAGE_TYPE";
+            return ChatErrorCode.INVALID_MESSAGE_TYPE.code();
         }
         if (message.contains("메시지 내용")) {
-            return "MESSAGE_CONTENT_REQUIRED";
+            return ChatErrorCode.MESSAGE_CONTENT_REQUIRED.code();
         }
         if (message.contains("MEDIA 메시지는 mediaUrl")) {
-            return "MEDIA_URL_REQUIRED";
+            return ChatErrorCode.MEDIA_URL_REQUIRED.code();
         }
         if (message.contains("USER 메시지는 mediaUrl")) {
-            return "INVALID_MESSAGE_PAYLOAD";
+            return ChatErrorCode.INVALID_MESSAGE_PAYLOAD.code();
         }
         if (message.contains("SYSTEM 메시지")) {
-            return "SYSTEM_MESSAGE_FORBIDDEN";
+            return ChatErrorCode.SYSTEM_MESSAGE_FORBIDDEN.code();
         }
         if (message.contains("지원하지 않는 이미지")) {
-            return "INVALID_FILE_TYPE";
+            return ChatErrorCode.INVALID_FILE_TYPE.code();
         }
         if (message.contains("읽음 처리할 메시지")) {
-            return "INVALID_READ_MESSAGE";
+            return ChatErrorCode.INVALID_READ_MESSAGE.code();
         }
         if (message.contains("종료된 로비")) {
-            return "LOBBY_CLOSED";
+            return ChatErrorCode.LOBBY_CLOSED.code();
         }
         if (message.contains("존재하지 않는 로비")) {
-            return "LOBBY_NOT_FOUND";
+            return ChatErrorCode.LOBBY_NOT_FOUND.code();
         }
         if (message.contains("계정 상태")) {
-            return "ACCOUNT_RESTRICTED";
+            return ChatErrorCode.ACCOUNT_RESTRICTED.code();
         }
         if (message.contains("only one lobby")) {
-            return "MULTIPLE_LOBBY_SUBSCRIPTION";
+            return ChatErrorCode.MULTIPLE_LOBBY_SUBSCRIPTION.code();
         }
         if (message.contains("Subscription destination")) {
-            return "INVALID_DESTINATION";
-        }
-        if (message.contains("Authorization") || message.contains("authentication") || message.contains("토큰")) {
-            return "AUTH_REQUIRED";
+            return ChatErrorCode.INVALID_DESTINATION.code();
         }
         if (message.contains("revoked")) {
-            return "TOKEN_REVOKED";
+            return ChatErrorCode.TOKEN_REVOKED.code();
+        }
+        if (message.contains("Authorization") || message.contains("authentication") || message.contains("토큰")) {
+            return ChatErrorCode.AUTH_REQUIRED.code();
         }
         if (message.contains("접근할 권한") || message.contains("접근 권한")) {
-            return "FORBIDDEN_ACCESS";
+            return ChatErrorCode.FORBIDDEN_ACCESS.code();
         }
-        if (exception instanceof AuthException authException) {
+        if (mapped instanceof AuthException authException) {
             return authCode(authException.getStatus());
         }
-        if (exception instanceof MessagingException) {
-            return "STOMP_ERROR";
+        if (mapped instanceof MessagingException || exception instanceof MessagingException) {
+            return ChatErrorCode.STOMP_ERROR.code();
         }
-        return "CHAT_ERROR";
+        return ChatErrorCode.UNKNOWN.code();
     }
 
     private static String authCode(HttpStatus status) {
         return switch (status) {
-            case UNAUTHORIZED -> "AUTH_REQUIRED";
-            case FORBIDDEN -> "FORBIDDEN_ACCESS";
-            case NOT_FOUND -> "LOBBY_NOT_FOUND";
-            case CONFLICT -> "LOBBY_CONFLICT";
-            case BAD_REQUEST -> "INVALID_CHAT_REQUEST";
-            default -> "CHAT_ERROR";
+            case UNAUTHORIZED -> ChatErrorCode.AUTH_REQUIRED.code();
+            case FORBIDDEN -> ChatErrorCode.FORBIDDEN_ACCESS.code();
+            case NOT_FOUND -> ChatErrorCode.LOBBY_NOT_FOUND.code();
+            case BAD_REQUEST -> ChatErrorCode.INVALID_MESSAGE_PAYLOAD.code();
+            default -> ChatErrorCode.UNKNOWN.code();
         };
     }
 }

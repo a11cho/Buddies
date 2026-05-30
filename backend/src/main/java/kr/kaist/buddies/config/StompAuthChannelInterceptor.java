@@ -9,6 +9,7 @@ import kr.kaist.buddies.auth.JwtTokenProvider;
 import kr.kaist.buddies.auth.domain.RevokedTokenRepository;
 import kr.kaist.buddies.chat.ChatErrorMapper;
 import kr.kaist.buddies.chat.ChatErrorPublishedEvent;
+import kr.kaist.buddies.chat.ChatException;
 import kr.kaist.buddies.chat.ChatService;
 import kr.kaist.buddies.chat.StompSessionManager;
 import org.springframework.context.ApplicationEventPublisher;
@@ -126,7 +127,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             } catch (MessagingException exception) {
                 publishError(authentication, exception);
                 throw exception;
-            } catch (AuthException exception) {
+            } catch (ChatException exception) {
                 publishError(authentication, exception);
                 throw new MessagingException(exception.getMessage(), exception);
             }
@@ -143,7 +144,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             AuthenticatedUser user = (AuthenticatedUser) authentication.getPrincipal();
             try {
                 chatService.requireConnectionAccess(user.id(), lobbyId);
-            } catch (AuthException exception) {
+            } catch (ChatException exception) {
                 publishError(authentication, exception);
                 throw new MessagingException(exception.getMessage(), exception);
             }

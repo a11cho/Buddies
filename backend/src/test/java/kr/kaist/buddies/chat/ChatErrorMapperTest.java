@@ -2,7 +2,6 @@ package kr.kaist.buddies.chat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import kr.kaist.buddies.auth.AuthException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.MessagingException;
@@ -10,17 +9,25 @@ import org.springframework.messaging.MessagingException;
 class ChatErrorMapperTest {
     @Test
     void mapsKnownChatValidationErrors() {
-        assertThat(ChatErrorMapper.toCode(new AuthException(HttpStatus.BAD_REQUEST, "메시지는 500자 이하로 입력해야 합니다.")))
-            .isEqualTo("MESSAGE_TOO_LONG");
-        assertThat(ChatErrorMapper.toCode(new AuthException(HttpStatus.BAD_REQUEST, "제한된 표현이 포함되어 있습니다.")))
-            .isEqualTo("RESTRICTED_KEYWORD");
-        assertThat(ChatErrorMapper.toCode(new AuthException(HttpStatus.BAD_REQUEST, "메시지 타입이 올바르지 않습니다.")))
-            .isEqualTo("INVALID_MESSAGE_TYPE");
+        assertThat(ChatErrorMapper.toCode(ChatErrorCode.MESSAGE_TOO_LONG.exception(HttpStatus.BAD_REQUEST)))
+            .isEqualTo(ChatErrorCode.MESSAGE_TOO_LONG.code());
+        assertThat(ChatErrorMapper.toCode(ChatErrorCode.RESTRICTED_KEYWORD.exception(HttpStatus.BAD_REQUEST)))
+            .isEqualTo(ChatErrorCode.RESTRICTED_KEYWORD.code());
+        assertThat(ChatErrorMapper.toCode(ChatErrorCode.INVALID_MESSAGE_TYPE.exception(HttpStatus.BAD_REQUEST)))
+            .isEqualTo(ChatErrorCode.INVALID_MESSAGE_TYPE.code());
     }
 
     @Test
     void mapsStompSessionErrors() {
         assertThat(ChatErrorMapper.toCode(new MessagingException("A STOMP session can subscribe to only one lobby.")))
-            .isEqualTo("MULTIPLE_LOBBY_SUBSCRIPTION");
+            .isEqualTo(ChatErrorCode.MULTIPLE_LOBBY_SUBSCRIPTION.code());
+    }
+
+    @Test
+    void mapsWrappedChatException() {
+        ChatException exception = ChatErrorCode.FORBIDDEN_ACCESS.exception(HttpStatus.FORBIDDEN);
+
+        assertThat(ChatErrorMapper.toCode(new MessagingException(exception.getMessage(), exception)))
+            .isEqualTo(ChatErrorCode.FORBIDDEN_ACCESS.code());
     }
 }
