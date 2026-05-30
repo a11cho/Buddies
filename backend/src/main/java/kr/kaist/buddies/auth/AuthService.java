@@ -10,6 +10,9 @@ import java.util.Base64;
 import java.util.HexFormat;
 import kr.kaist.buddies.auth.AuthController.LoginResponse;
 import kr.kaist.buddies.auth.AuthController.MeResponse;
+import kr.kaist.buddies.auth.AuthController.PaymentInfoResponse;
+import kr.kaist.buddies.auth.domain.HostPaymentInfo;
+import kr.kaist.buddies.auth.domain.HostPaymentInfoRepository;
 import kr.kaist.buddies.auth.domain.PendingSignup;
 import kr.kaist.buddies.auth.domain.PendingSignupRepository;
 import kr.kaist.buddies.auth.domain.PasswordResetToken;
@@ -32,10 +35,13 @@ public class AuthService {
     private static final int MAX_OTP_ATTEMPTS = 3;
     private static final int MAX_PASSWORD_LENGTH = 72;
     private static final int PASSWORD_RESET_TOKEN_BYTES = 32;
+    private static final int MAX_PAYMENT_INFO_LENGTH = 100;
     private static final String NAME_PATTERN = "[A-Za-z0-9가-힣 ]+";
     private static final String PASSWORD_PATTERN = "[A-Za-z0-9!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?`~]+";
+    private static final String ACCOUNT_NUMBER_PATTERN = "[0-9 -]+";
 
     private final UserRepository userRepository;
+    private final HostPaymentInfoRepository hostPaymentInfoRepository;
     private final PendingSignupRepository pendingSignupRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
@@ -46,6 +52,7 @@ public class AuthService {
 
     public AuthService(
         UserRepository userRepository,
+        HostPaymentInfoRepository hostPaymentInfoRepository,
         PendingSignupRepository pendingSignupRepository,
         PasswordResetTokenRepository passwordResetTokenRepository,
         PasswordEncoder passwordEncoder,
@@ -54,6 +61,7 @@ public class AuthService {
         RevokedTokenRepository revokedTokenRepository
     ) {
         this.userRepository = userRepository;
+        this.hostPaymentInfoRepository = hostPaymentInfoRepository;
         this.pendingSignupRepository = pendingSignupRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.passwordEncoder = passwordEncoder;
@@ -165,6 +173,34 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
+    public PaymentInfoResponse paymentInfo(Long userId) {
+        HostPaymentInfo paymentInfo = hostPaymentInfoRepository.findByUser_Id(userId)
+            .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "계좌 정보가 아직 등록되지 않았습니다."));
+        return toPaymentInfoResponse(paymentInfo);
+    }
+
+    @Transactional
+    public PaymentInfoResponse updatePaymentInfo(Long userId, String bankName, String accountNumber, String accountHolderName) {
+        String normalizedBankName = requiredPaymentField(bankName);
+        String normalizedAccountNumber = requiredPaymentField(accountNumber);
+        String normalizedAccountHolderName = requiredPaymentField(accountHolderName);
+        if (!validAccountNumber(normalizedAccountNumber)) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "계좌번호 형식이 올바르지 않습니다.");
+        }
+
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "토큰이 올바르지 않습니다."));
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new AuthException(HttpStatus.FORBIDDEN, "접근 권한이 없습니다.");
+        }
+
+        HostPaymentInfo paymentInfo = hostPaymentInfoRepository.findByUser_Id(userId)
+            .orElseGet(() -> new HostPaymentInfo(user, normalizedBankName, normalizedAccountNumber, normalizedAccountHolderName));
+        paymentInfo.update(normalizedBankName, normalizedAccountNumber, normalizedAccountHolderName);
+        return toPaymentInfoResponse(hostPaymentInfoRepository.save(paymentInfo));
+    }
+
+    @Transactional(readOnly = true)
     public LoginResponse refresh(Long userId) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "토큰이 올바르지 않습니다."));
@@ -224,6 +260,15 @@ public class AuthService {
         return new LoginResponse(jwtTokenProvider.createAccessToken(user.getId(), user.getRole()), "Bearer", jwtTokenProvider.expiresInSeconds());
     }
 
+    private PaymentInfoResponse toPaymentInfoResponse(HostPaymentInfo paymentInfo) {
+        return new PaymentInfoResponse(
+            paymentInfo.getBankName(),
+            paymentInfo.getAccountNumber(),
+            paymentInfo.getAccountHolderName(),
+            paymentInfo.getUpdatedAt() == null ? null : paymentInfo.getUpdatedAt().toString()
+        );
+    }
+
     private void rejectIfUserExists(String email) {
         if (userRepository.existsByEmail(email)) {
             throw new AuthException(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다.");
@@ -256,6 +301,21 @@ public class AuthService {
             && password.chars().anyMatch(Character::isLetter)
             && password.chars().anyMatch(Character::isDigit)
             && password.chars().anyMatch(ch -> !Character.isLetterOrDigit(ch));
+    }
+
+    private String requiredPaymentField(String value) {
+        if (value == null) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다.");
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty() || trimmed.length() > MAX_PAYMENT_INFO_LENGTH) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다.");
+        }
+        return trimmed;
+    }
+
+    private boolean validAccountNumber(String accountNumber) {
+        return accountNumber.length() >= 4 && accountNumber.length() <= MAX_PAYMENT_INFO_LENGTH && accountNumber.matches(ACCOUNT_NUMBER_PATTERN);
     }
 
     private String normalizeEmail(String email) {
