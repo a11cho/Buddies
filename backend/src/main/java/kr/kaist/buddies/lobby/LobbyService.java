@@ -80,6 +80,9 @@ public class LobbyService {
     public LobbyResponse create(Long userId, CreateLobbyRequest request) {
         User host = findUser(userId);
         rejectIfUserHasActiveLobby(userId);
+        if (!hostPaymentInfoRepository.existsByUser_Id(userId)) {
+            throw new AuthException(HttpStatus.CONFLICT, "로비를 생성하기 전에 계좌 정보를 등록해야 합니다.");
+        }
 
         DeliveryLocation location = parseDeliveryLocation(request.deliveryLocation());
         Lobby lobby = lobbyRepository.save(new Lobby(
