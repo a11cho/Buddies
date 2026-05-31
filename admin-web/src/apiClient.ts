@@ -7,6 +7,58 @@ export type SystemOverview = {
   recentLobbies: RecentLobby[];
 };
 
+export type ReportPage = {
+  items: ReportSummary[];
+  page: number;
+  size: number;
+  totalCount: number;
+};
+
+export type ReportSummary = {
+  reportId: number;
+  lobbyId: number;
+  reporterUserId: number;
+  reportedUserId: number;
+  reason: string;
+  status: string;
+  createdAt: string;
+};
+
+export type ReportDetail = {
+  reportId: number;
+  lobbyId: number;
+  reporter: UserReference;
+  reportedUser: UserReference;
+  reportedMessageId: number | null;
+  reason: string;
+  description: string | null;
+  status: string;
+  resolutionNote: string | null;
+  createdAt: string;
+};
+
+export type UserReference = {
+  id: number;
+  name: string;
+};
+
+export type ChatArchive = {
+  lobbyId: number;
+  messages: ArchiveMessage[];
+};
+
+export type ArchiveMessage = {
+  messageId: number;
+  lobbyId: number;
+  senderUserId: number | null;
+  senderName: string | null;
+  messageType: string;
+  content: string | null;
+  mediaUrl: string | null;
+  reported: boolean;
+  createdAt: string;
+};
+
 export type RecentLobby = {
   lobbyId: number;
   restaurantName: string;
@@ -16,6 +68,49 @@ export type RecentLobby = {
   currentTotal: number;
   orderStatus: string;
   cartLocked: boolean;
+  createdAt: string;
+};
+
+export type CurrentUser = {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+};
+
+export type AdminUserPage = {
+  items: AdminUserSummary[];
+  page: number;
+  size: number;
+  totalCount: number;
+};
+
+export type AdminUserSummary = {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  trustScore: number;
+  createdAt: string;
+};
+
+export type AdminUserDetail = AdminUserSummary & {
+  reportedCount: number;
+  reporterCount: number;
+  closedLobbyCount: number;
+  moderationActions: ModerationAction[];
+};
+
+export type ModerationAction = {
+  id: number;
+  actionType: string;
+  reason: string;
+  adminUserId: number;
+  adminName: string;
+  reportId: number | null;
+  startsAt: string;
+  endsAt: string | null;
   createdAt: string;
 };
 
@@ -35,6 +130,29 @@ export class ApiClient {
     return this.request<SystemOverview>('/admin/system/overview', options);
   }
 
+  async getReports(status = 'OPEN', page = 1, size = 20, options: RequestOptions = {}): Promise<ReportPage> {
+    return this.request<ReportPage>('/admin/reports', {
+      ...options,
+      query: { status, page, size },
+    });
+  }
+
+  async getReport(reportId: number, options: RequestOptions = {}): Promise<ReportDetail> {
+    return this.request<ReportDetail>(`/admin/reports/${reportId}`, options);
+  }
+
+  async resolveReport(reportId: number, resolutionNote: string, options: RequestOptions = {}): Promise<MessageResponse> {
+    return this.request<MessageResponse>(`/admin/reports/${reportId}/resolve`, {
+      ...options,
+      method: 'PATCH',
+      body: { resolutionNote },
+    });
+  }
+
+  async getChatArchive(lobbyId: number, options: RequestOptions = {}): Promise<ChatArchive> {
+    return this.request<ChatArchive>(`/admin/lobbies/${lobbyId}/chat-archive`, options);
+  }
+
   async login(email: string, password: string): Promise<LoginResponse> {
     // Passwords are sent only over HTTPS/TLS and must be bcrypt-verified by the server.
     return this.request<LoginResponse>('/auth/login', {
@@ -43,10 +161,40 @@ export class ApiClient {
     });
   }
 
+  async getMe(options: RequestOptions = {}): Promise<CurrentUser> {
+    return this.request<CurrentUser>('/auth/me', options);
+  }
+
+  async getUsers(status = 'ACTIVE', page = 1, size = 20, options: RequestOptions = {}): Promise<AdminUserPage> {
+    return this.request<AdminUserPage>('/admin/users', {
+      ...options,
+      query: { status, page, size },
+    });
+  }
+
+  async getUser(userId: number, options: RequestOptions = {}): Promise<AdminUserDetail> {
+    return this.request<AdminUserDetail>(`/admin/users/${userId}`, options);
+  }
+
+  async moderateUser(
+    userId: number,
+    actionType: string,
+    reason: string,
+    endsAt: string | null,
+    reportId: number | null,
+    options: RequestOptions = {},
+  ): Promise<MessageResponse> {
+    return this.request<MessageResponse>(`/admin/users/${userId}/moderation-actions`, {
+      ...options,
+      method: 'POST',
+      body: { actionType, reason, endsAt: endsAt ?? undefined, reportId: reportId ?? undefined },
+    });
+  }
+
   async verifySignup(email: string, otp: string): Promise<MessageResponse> {
     return this.request<MessageResponse>('/auth/signup/verify', {
       method: 'POST',
-      body: { email, otp: await sha256Hex(otp) },
+      body: { email, otp },
     });
   }
 

@@ -32,7 +32,8 @@ public enum LobbyErrorCode {
     PAYMENT_RECORD_INACTIVE("LOBBY_ERR27", "비활성화된 결제 기록은 확인할 수 없습니다."),
     NO_PAYABLE_MEMBERS("LOBBY_ERR28", "정산할 로비 멤버가 없습니다."),
     PAYMENT_ACCESS_FORBIDDEN("LOBBY_ERR29", "정산 기록에 접근할 권한이 없습니다."),
-    STATUS_DIRECT_CHANGE_FORBIDDEN("LOBBY_ERR30", "요청한 상태로 직접 변경할 수 없습니다.");
+    STATUS_DIRECT_CHANGE_FORBIDDEN("LOBBY_ERR30", "요청한 상태로 직접 변경할 수 없습니다."),
+    HOST_PAYMENT_INFO_REQUIRED("LOBBY_ERR31", "계좌 정보를 등록해야 합니다.");
 
     private final String code;
     private final String message;

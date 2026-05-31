@@ -2,6 +2,8 @@ package kr.kaist.buddies.lobby;
 
 import java.time.Instant;
 import java.util.List;
+import kr.kaist.buddies.auth.domain.HostPaymentInfo;
+import kr.kaist.buddies.auth.domain.HostPaymentInfoRepository;
 import kr.kaist.buddies.chat.ChatArchiveService;
 import kr.kaist.buddies.chat.ChatReadService;
 import kr.kaist.buddies.lobby.LobbyController.CreateLobbyRequest;
@@ -40,6 +42,7 @@ public class LobbyService {
     private final PaymentService paymentService;
     private final LobbyEventPublisher lobbyEventPublisher;
     private final ChatArchiveService chatArchiveService;
+    private final HostPaymentInfoRepository hostPaymentInfoRepository;
 
     public LobbyService(
         LobbyRepository lobbyRepository,
@@ -49,7 +52,8 @@ public class LobbyService {
         ChatReadService chatReadService,
         PaymentService paymentService,
         LobbyEventPublisher lobbyEventPublisher,
-        ChatArchiveService chatArchiveService
+        ChatArchiveService chatArchiveService,
+        HostPaymentInfoRepository hostPaymentInfoRepository
     ) {
         this.lobbyRepository = lobbyRepository;
         this.lobbyMembershipRepository = lobbyMembershipRepository;
@@ -59,6 +63,7 @@ public class LobbyService {
         this.paymentService = paymentService;
         this.lobbyEventPublisher = lobbyEventPublisher;
         this.chatArchiveService = chatArchiveService;
+        this.hostPaymentInfoRepository = hostPaymentInfoRepository;
     }
 
     @Transactional(readOnly = true)
@@ -74,6 +79,9 @@ public class LobbyService {
     public LobbyResponse create(Long userId, CreateLobbyRequest request) {
         User host = findUser(userId);
         rejectIfUserHasActiveLobby(userId);
+        if (!hostPaymentInfoRepository.existsByUser_Id(userId)) {
+            throw LobbyErrorCode.HOST_PAYMENT_INFO_REQUIRED.exception(HttpStatus.CONFLICT);
+        }
 
         DeliveryLocation location = parseDeliveryLocation(request.deliveryLocation());
         Lobby lobby = lobbyRepository.save(new Lobby(
@@ -129,6 +137,9 @@ public class LobbyService {
     public LockCartResponse lockCart(Long userId, Long lobbyId) {
         Lobby lobby = findLobby(lobbyId);
         requireHost(lobbyId, userId);
+        if (!hostPaymentInfoRepository.existsByUser_Id(userId)) {
+            throw LobbyErrorCode.HOST_PAYMENT_INFO_REQUIRED.exception(HttpStatus.CONFLICT);
+        }
         if (!lobby.isOpenForJoin()) {
             throw LobbyErrorCode.LOBBY_LOCK_FORBIDDEN.exception(HttpStatus.CONFLICT);
         }
@@ -354,6 +365,9 @@ public class LobbyService {
     private LobbyResponse toResponse(Lobby lobby, Long userId) {
         long participantCount = lobbyMembershipRepository.countByLobby_IdAndStatus(lobby.getId(), LobbyMembershipStatus.ACTIVE);
         ReadState readState = readStateFor(lobby.getId(), userId);
+        HostPaymentInfo paymentInfo = exposesHostPaymentInfo(lobby.getOrderStatus())
+            ? hostPaymentInfoRepository.findByUser_Id(lobby.getHost().getId()).orElse(null)
+            : null;
         return new LobbyResponse(
             lobby.getId(),
             lobby.getHost().getId(),
@@ -366,8 +380,17 @@ public class LobbyService {
             lobby.getOrderStatus().name(),
             lobby.getCartLockedAt() == null ? null : lobby.getCartLockedAt().toString(),
             readState.lastReadMessageId(),
-            readState.unreadCount()
+            readState.unreadCount(),
+            paymentInfo == null ? null : paymentInfo.getBankName(),
+            paymentInfo == null ? null : paymentInfo.getAccountNumber(),
+            paymentInfo == null ? null : paymentInfo.getAccountHolderName()
         );
+    }
+
+    private boolean exposesHostPaymentInfo(LobbyOrderStatus orderStatus) {
+        return orderStatus != LobbyOrderStatus.WAITING
+            && orderStatus != LobbyOrderStatus.CANCELED
+            && orderStatus != LobbyOrderStatus.CLOSED;
     }
 
     private LobbyMembershipResponse toMembershipResponse(LobbyMembership membership) {

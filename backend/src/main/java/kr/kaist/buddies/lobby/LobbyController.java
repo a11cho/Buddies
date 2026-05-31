@@ -7,8 +7,8 @@ import jakarta.validation.constraints.PositiveOrZero;
 import java.util.List;
 import kr.kaist.buddies.auth.AuthenticatedUser;
 import kr.kaist.buddies.auth.CurrentUser;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -116,7 +116,10 @@ public class LobbyController {
         String orderStatus,
         String cartLockedAt,
         Long lastReadMessageId,
-        long unreadCount
+        long unreadCount,
+        String hostBankName,
+        String hostAccountNumber,
+        String hostAccountHolderName
     ) {}
     public record LobbyMembershipResponse(
         Long lobbyId,
