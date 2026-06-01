@@ -514,10 +514,18 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       if (!mounted) {
         return;
       }
+      final updatedRecords = lobby.paymentRecords.map((record) {
+        return record.paymentRecordId == result.paymentRecordId
+            ? result
+            : record;
+      }).toList();
+      final allPaymentsPaid =
+          updatedRecords.isNotEmpty &&
+          updatedRecords.every((record) => record.isPaid);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result.allPaymentsPaid
+            allPaymentsPaid
                 ? 'Payment confirmed. All payments are paid.'
                 : 'Payment confirmed.',
           ),

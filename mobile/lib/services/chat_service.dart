@@ -17,6 +17,18 @@ class ChatConnectionInfo {
   final String errorDestination;
   final int heartbeatIncoming;
   final int heartbeatOutgoing;
+
+  factory ChatConnectionInfo.fromServerUrl({
+    required int lobbyId,
+    required String serverUrl,
+  }) {
+    return ChatConnectionInfo(
+      serverUrl: serverUrl,
+      subscribeDestination: '/topic/lobbies/$lobbyId/chat',
+      sendDestination: '/app/lobbies/$lobbyId/chat/send',
+      errorDestination: '/user/queue/chat-errors',
+    );
+  }
 }
 
 class ChatValidation {

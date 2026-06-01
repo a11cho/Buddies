@@ -8,7 +8,7 @@ class MockReportService implements ReportService {
   final MockDataStore _store;
 
   @override
-  Future<ReportSubmission> submitReport(ReportRequest request) async {
+  Future<void> submitReport(ReportRequest request) async {
     final lobby = _store.findLobby(request.lobbyId);
     _ensureCurrentUserCanReport(lobby);
     if (request.reportedUserId == _store.currentUser.id) {
@@ -38,11 +38,7 @@ class MockReportService implements ReportService {
       }
     }
 
-    return ReportSubmission(
-      reportId: _store.nextReportId++,
-      createdAt: DateTime.now(),
-      status: 'SUBMITTED',
-    );
+    _store.nextReportId++;
   }
 
   void _ensureCurrentUserCanReport(Lobby lobby) {

@@ -32,7 +32,7 @@ class MockHelpService implements HelpService {
   }
 
   @override
-  Future<SupportTicketSubmission> submitSupportTicket(
+  Future<void> submitSupportTicket(
     SupportTicketRequest request,
   ) async {
     if (!SupportTicketCategory.values.contains(request.category)) {
@@ -52,9 +52,6 @@ class MockHelpService implements HelpService {
       }
     }
 
-    return SupportTicketSubmission(
-      ticketId: _store.nextSupportTicketId++,
-      status: 'OPEN',
-    );
+    _store.nextSupportTicketId++;
   }
 }
