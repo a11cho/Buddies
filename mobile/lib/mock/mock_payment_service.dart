@@ -1,5 +1,6 @@
 import '../core/enums.dart';
 import '../models/lobby.dart';
+import '../models/payment_record.dart';
 import '../services/payment_service.dart';
 import 'mock_data_store.dart';
 
@@ -9,7 +10,7 @@ class MockPaymentService implements PaymentService {
   final MockDataStore _store;
 
   @override
-  Future<ConfirmPaymentResult> confirmPaymentRecord(
+  Future<PaymentRecord> confirmPaymentRecord(
     int lobbyId,
     int paymentRecordId,
   ) async {
@@ -29,8 +30,6 @@ class MockPaymentService implements PaymentService {
     if (targetRecord.isPaid) {
       throw StateError('PaymentRecord is already PAID.');
     }
-    final previousStatus = targetRecord.status;
-
     final updatedRecords = lobby.paymentRecords.map((record) {
       if (record.paymentRecordId != paymentRecordId) {
         return record;
@@ -42,7 +41,9 @@ class MockPaymentService implements PaymentService {
       );
     }).toList();
 
-    final allPaymentsPaid = updatedRecords.every((record) => record.isPaid);
+    final updatedRecord = updatedRecords.firstWhere(
+      (record) => record.paymentRecordId == paymentRecordId,
+    );
     _store.replaceLobby(lobby.copyWith(paymentRecords: updatedRecords));
     _store.addSystemMessage(
       lobbyId: lobbyId,
@@ -52,17 +53,7 @@ class MockPaymentService implements PaymentService {
       targetUserId: targetRecord.userId,
     );
 
-    return ConfirmPaymentResult(
-      paymentRecordId: targetRecord.paymentRecordId,
-      lobbyId: lobbyId,
-      userId: targetRecord.userId,
-      amount: targetRecord.amount,
-      previousStatus: previousStatus,
-      status: PaymentStatus.paid,
-      confirmedByHostId: lobby.hostUserId,
-      confirmedAt: confirmedAt,
-      allPaymentsPaid: allPaymentsPaid,
-    );
+    return updatedRecord;
   }
 
   String _memberNameById(Lobby lobby, int userId) {

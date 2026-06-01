@@ -2,7 +2,7 @@
 // 지금 Phase 1에서는 구조만 잡아두고, 화면은 mock data를 사용합니다.
 class ApiClientConfig {
   const ApiClientConfig({
-    this.baseUrl = 'http://10.0.2.2:8080/api',
+    this.baseUrl = 'https://10.0.2.2:8443',
   });
 
   final String baseUrl;
@@ -18,7 +18,7 @@ class ApiClient {
   final ApiClientConfig config;
 
   // baseUrl과 endpoint path를 안전하게 합쳐 Uri로 만듭니다.
-  // 예: /lobbies -> http://10.0.2.2:8080/api/lobbies
+  // 예: /lobbies -> https://10.0.2.2:8443/lobbies
   Uri buildUri(String path) {
     final baseUri = Uri.parse(config.baseUrl);
     final normalizedBase =

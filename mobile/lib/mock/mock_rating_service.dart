@@ -8,7 +8,7 @@ class MockRatingService implements RatingService {
   final MockDataStore _store;
 
   @override
-  Future<RatingSubmission> submitRating(RatingRequest request) async {
+  Future<void> submitRating(RatingRequest request) async {
     final lobby = _store.findLobby(request.lobbyId);
     if (lobby.orderStatus != LobbyStatus.closed) {
       throw StateError('Ratings are only available for CLOSED lobbies.');
@@ -40,12 +40,7 @@ class MockRatingService implements RatingService {
     }
     _store.submittedRatingKeys.add(key);
 
-    return RatingSubmission(
-      ratingId: _store.nextRatingId++,
-      lobbyId: request.lobbyId,
-      targetUserId: request.targetUserId,
-      rating: request.rating,
-    );
+    _store.nextRatingId++;
   }
 
   String _ratingKey(int lobbyId, int fromUserId, int targetUserId) {

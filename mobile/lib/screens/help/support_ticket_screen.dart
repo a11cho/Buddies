@@ -190,7 +190,7 @@ class _SupportTicketScreenState extends State<SupportTicketScreen> {
     });
 
     try {
-      final result = await AppServices.helpService.submitSupportTicket(
+      await AppServices.helpService.submitSupportTicket(
         SupportTicketRequest(
           category: _category,
           title: _titleController.text.trim(),
@@ -202,7 +202,7 @@ class _SupportTicketScreenState extends State<SupportTicketScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ticket #${result.ticketId} submitted.')),
+        const SnackBar(content: Text('Support ticket submitted.')),
       );
       Navigator.pop(context, true);
     } catch (error) {

@@ -40,18 +40,6 @@ class ReportRequest {
   }
 }
 
-class ReportSubmission {
-  const ReportSubmission({
-    required this.reportId,
-    required this.createdAt,
-    required this.status,
-  });
-
-  final int reportId;
-  final DateTime createdAt;
-  final String status;
-}
-
 abstract class ReportService {
-  Future<ReportSubmission> submitReport(ReportRequest request);
+  Future<void> submitReport(ReportRequest request);
 }

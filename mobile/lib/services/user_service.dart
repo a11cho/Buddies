@@ -32,7 +32,7 @@ class UpdatePaymentInfoRequest {
   }
 }
 
-// /users/me 계열 API를 위한 service입니다.
+// /users/me와 /auth/me/payment-info 계열 API를 위한 service입니다.
 // AuthService는 로그인/회원가입을 담당하고, UserService는 로그인된 사용자 정보를 담당합니다.
 abstract class UserService {
   Future<User> getMe();

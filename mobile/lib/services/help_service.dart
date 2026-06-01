@@ -30,20 +30,10 @@ class SupportTicketRequest {
   final int? lobbyId;
 }
 
-class SupportTicketSubmission {
-  const SupportTicketSubmission({
-    required this.ticketId,
-    required this.status,
-  });
-
-  final int ticketId;
-  final String status;
-}
-
 abstract class HelpService {
   Future<List<FaqItem>> getFaqs();
 
-  Future<SupportTicketSubmission> submitSupportTicket(
+  Future<void> submitSupportTicket(
     SupportTicketRequest request,
   );
 }

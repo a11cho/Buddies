@@ -12,20 +12,6 @@ class RatingRequest {
   final String feedback;
 }
 
-class RatingSubmission {
-  const RatingSubmission({
-    required this.ratingId,
-    required this.lobbyId,
-    required this.targetUserId,
-    required this.rating,
-  });
-
-  final int ratingId;
-  final int lobbyId;
-  final int targetUserId;
-  final int rating;
-}
-
 abstract class RatingService {
-  Future<RatingSubmission> submitRating(RatingRequest request);
+  Future<void> submitRating(RatingRequest request);
 }
