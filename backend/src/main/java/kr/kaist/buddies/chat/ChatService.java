@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import kr.kaist.buddies.auth.AuthException;
 import kr.kaist.buddies.chat.ChatController.ChatHistoryResponse;
 import kr.kaist.buddies.chat.ChatController.ChatMessageRequest;
 import kr.kaist.buddies.chat.ChatController.ChatMessageResponse;
@@ -123,7 +122,7 @@ public class ChatService {
     public ChatReadStateResponse updateReadState(Long userId, Long lobbyId, Long lastReadMessageId) {
         LobbyMembership membership = requireActiveMember(lobbyId, userId);
         if (!chatMessageRepository.existsByIdAndLobby_Id(lastReadMessageId, lobbyId)) {
-            throw new AuthException(HttpStatus.BAD_REQUEST, "읽음 처리할 메시지가 해당 로비에 속하지 않습니다.");
+            throw ChatErrorCode.INVALID_READ_MESSAGE.exception(HttpStatus.BAD_REQUEST);
         }
 
         Instant now = Instant.now();
@@ -156,21 +155,21 @@ public class ChatService {
     private Lobby requireOpenLobby(Long lobbyId) {
         Lobby lobby = findLobby(lobbyId);
         if (lobby.isClosedOrCanceled()) {
-            throw new AuthException(HttpStatus.FORBIDDEN, "종료된 로비의 채팅에는 접근할 수 없습니다.");
+            throw ChatErrorCode.LOBBY_CLOSED.exception(HttpStatus.FORBIDDEN);
         }
         return lobby;
     }
 
     private Lobby findLobby(Long lobbyId) {
         return lobbyRepository.findById(lobbyId)
-            .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "존재하지 않는 로비입니다."));
+            .orElseThrow(() -> ChatErrorCode.LOBBY_NOT_FOUND.exception(HttpStatus.NOT_FOUND));
     }
 
     private User requireActiveUser(Long userId) {
         User user = userRepository.findById(userId)
-            .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "토큰이 올바르지 않습니다."));
+            .orElseThrow(() -> ChatErrorCode.AUTH_REQUIRED.exception(HttpStatus.UNAUTHORIZED));
         if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new AuthException(HttpStatus.FORBIDDEN, "계정 상태로 인해 채팅을 보낼 수 없습니다.");
+            throw ChatErrorCode.ACCOUNT_RESTRICTED.exception(HttpStatus.FORBIDDEN);
         }
         return user;
     }
@@ -178,35 +177,35 @@ public class ChatService {
     private LobbyMembership requireActiveMember(Long lobbyId, Long userId) {
         requireOpenLobby(lobbyId);
         return lobbyMembershipRepository.findByLobby_IdAndUser_IdAndStatus(lobbyId, userId, LobbyMembershipStatus.ACTIVE)
-            .orElseThrow(() -> new AuthException(HttpStatus.FORBIDDEN, "해당 로비에 접근할 권한이 없습니다."));
+            .orElseThrow(() -> ChatErrorCode.FORBIDDEN_ACCESS.exception(HttpStatus.FORBIDDEN));
     }
 
     private ChatMessageType parseClientMessageType(String value) {
         try {
             ChatMessageType type = ChatMessageType.valueOf(value.trim().toUpperCase(Locale.ROOT));
             if (type == ChatMessageType.SYSTEM) {
-                throw new AuthException(HttpStatus.FORBIDDEN, "SYSTEM 메시지는 사용자가 전송할 수 없습니다.");
+                throw ChatErrorCode.SYSTEM_MESSAGE_FORBIDDEN.exception(HttpStatus.FORBIDDEN);
             }
             return type;
         } catch (IllegalArgumentException exception) {
-            throw new AuthException(HttpStatus.BAD_REQUEST, "메시지 타입이 올바르지 않습니다.");
+            throw ChatErrorCode.INVALID_MESSAGE_TYPE.exception(HttpStatus.BAD_REQUEST);
         }
     }
 
     private void validateMessagePayload(ChatMessageType messageType, String content, String mediaUrl) {
         if (content != null && content.length() > MAX_CONTENT_LENGTH) {
-            throw new AuthException(HttpStatus.BAD_REQUEST, "메시지는 500자 이하로 입력해야 합니다.");
+            throw ChatErrorCode.MESSAGE_TOO_LONG.exception(HttpStatus.BAD_REQUEST);
         }
         if (messageType == ChatMessageType.USER) {
             if (content == null || content.isBlank()) {
-                throw new AuthException(HttpStatus.BAD_REQUEST, "메시지 내용이 필요합니다.");
+                throw ChatErrorCode.MESSAGE_CONTENT_REQUIRED.exception(HttpStatus.BAD_REQUEST);
             }
             if (mediaUrl != null) {
-                throw new AuthException(HttpStatus.BAD_REQUEST, "USER 메시지는 mediaUrl을 포함할 수 없습니다.");
+                throw ChatErrorCode.INVALID_MESSAGE_PAYLOAD.exception(HttpStatus.BAD_REQUEST);
             }
         }
         if (messageType == ChatMessageType.MEDIA && mediaUrl == null) {
-            throw new AuthException(HttpStatus.BAD_REQUEST, "MEDIA 메시지는 mediaUrl이 필요합니다.");
+            throw ChatErrorCode.MEDIA_URL_REQUIRED.exception(HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -217,13 +216,13 @@ public class ChatService {
         String lowered = content.toLowerCase(Locale.ROOT);
         boolean restricted = RESTRICTED_KEYWORDS.stream().anyMatch(lowered::contains);
         if (restricted) {
-            throw new AuthException(HttpStatus.BAD_REQUEST, "제한된 표현이 포함되어 있습니다.");
+            throw ChatErrorCode.RESTRICTED_KEYWORD.exception(HttpStatus.BAD_REQUEST);
         }
     }
 
     private void requireSupportedImageType(String contentType) {
         if (!List.of("image/jpeg", "image/png", "image/gif", "image/webp").contains(contentType)) {
-            throw new AuthException(HttpStatus.BAD_REQUEST, "지원하지 않는 이미지 형식입니다.");
+            throw ChatErrorCode.INVALID_FILE_TYPE.exception(HttpStatus.BAD_REQUEST);
         }
     }
 

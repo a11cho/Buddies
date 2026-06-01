@@ -2,7 +2,6 @@ package kr.kaist.buddies.lobby;
 
 import java.time.Instant;
 import java.util.List;
-import kr.kaist.buddies.auth.AuthException;
 import kr.kaist.buddies.auth.domain.HostPaymentInfo;
 import kr.kaist.buddies.auth.domain.HostPaymentInfoRepository;
 import kr.kaist.buddies.chat.ChatArchiveService;
@@ -71,7 +70,7 @@ public class LobbyService {
     public List<LobbySummaryResponse> list(Long userId, String deliveryLocation, String restaurantName) {
         DeliveryLocation location = parseDeliveryLocationOrNull(deliveryLocation);
         String normalizedRestaurantName = normalizeSearchText(restaurantName);
-        return lobbyRepository.searchAvailable(location, normalizedRestaurantName).stream()
+        return searchAvailableLobbies(location, normalizedRestaurantName).stream()
             .map(lobby -> toSummaryResponse(lobby, userId))
             .toList();
     }
@@ -81,7 +80,7 @@ public class LobbyService {
         User host = findUser(userId);
         rejectIfUserHasActiveLobby(userId);
         if (!hostPaymentInfoRepository.existsByUser_Id(userId)) {
-            throw new AuthException(HttpStatus.CONFLICT, "로비를 생성하기 전에 계좌 정보를 등록해야 합니다.");
+            throw LobbyErrorCode.HOST_PAYMENT_INFO_REQUIRED.exception(HttpStatus.CONFLICT);
         }
 
         DeliveryLocation location = parseDeliveryLocation(request.deliveryLocation());
@@ -109,7 +108,7 @@ public class LobbyService {
         Lobby lobby = findLobby(lobbyId);
         rejectIfUserHasActiveLobby(userId);
         if (!lobby.isOpenForJoin()) {
-            throw new AuthException(HttpStatus.CONFLICT, "참여할 수 없는 로비입니다.");
+            throw LobbyErrorCode.LOBBY_NOT_JOINABLE.exception(HttpStatus.CONFLICT);
         }
 
         LobbyMembership membership = lobbyMembershipRepository.save(new LobbyMembership(lobby, user, LobbyMemberRole.PARTICIPANT));
@@ -122,10 +121,10 @@ public class LobbyService {
         Lobby lobby = findLobby(lobbyId);
         LobbyMembership membership = requireActiveMember(lobbyId, userId);
         if (!membership.isParticipant()) {
-            throw new AuthException(HttpStatus.FORBIDDEN, "Host는 이 API로 로비를 나갈 수 없습니다.");
+            throw LobbyErrorCode.HOST_LEAVE_FORBIDDEN.exception(HttpStatus.FORBIDDEN);
         }
         if (lobby.isCartLocked() || lobby.getOrderStatus() != LobbyOrderStatus.WAITING) {
-            throw new AuthException(HttpStatus.CONFLICT, "이미 잠긴 로비에서는 직접 나갈 수 없습니다.");
+            throw LobbyErrorCode.LOBBY_LEAVE_LOCKED.exception(HttpStatus.CONFLICT);
         }
 
         membership.leave(Instant.now());
@@ -139,13 +138,13 @@ public class LobbyService {
         Lobby lobby = findLobby(lobbyId);
         requireHost(lobbyId, userId);
         if (!hostPaymentInfoRepository.existsByUser_Id(userId)) {
-            throw new AuthException(HttpStatus.CONFLICT, "Cart Locking 전에 계좌 정보를 등록해야 합니다.");
+            throw LobbyErrorCode.HOST_PAYMENT_INFO_REQUIRED.exception(HttpStatus.CONFLICT);
         }
         if (!lobby.isOpenForJoin()) {
-            throw new AuthException(HttpStatus.CONFLICT, "잠글 수 없는 로비 상태입니다.");
+            throw LobbyErrorCode.LOBBY_LOCK_FORBIDDEN.exception(HttpStatus.CONFLICT);
         }
         if (lobby.getCurrentTotalAmount() < lobby.getMinimumOrderAmount()) {
-            throw new AuthException(HttpStatus.CONFLICT, "최소 주문 금액을 충족하지 못했습니다.");
+            throw LobbyErrorCode.MINIMUM_ORDER_NOT_MET.exception(HttpStatus.CONFLICT);
         }
 
         String previousStatus = lobby.getOrderStatus().name();
@@ -162,7 +161,7 @@ public class LobbyService {
         LobbyOrderStatus nextStatus = parseOrderStatus(request.newStatus());
         validateStatusTransition(lobby, nextStatus);
         if (nextStatus == LobbyOrderStatus.ORDER_PLACED && !paymentService.allPayableRecordsPaid(lobbyId)) {
-            throw new AuthException(HttpStatus.CONFLICT, "모든 정산 기록이 PAID 상태가 아닙니다.");
+            throw LobbyErrorCode.PAYMENT_NOT_ALL_PAID.exception(HttpStatus.CONFLICT);
         }
 
         String previousStatus = lobby.getOrderStatus().name();
@@ -176,13 +175,13 @@ public class LobbyService {
         Lobby lobby = findLobby(lobbyId);
         LobbyMembership currentHost = requireHost(lobbyId, userId);
         if (lobby.getOrderStatus() != LobbyOrderStatus.WAITING || lobby.isCartLocked()) {
-            throw new AuthException(HttpStatus.CONFLICT, "현재 로비 상태에서는 Host 권한을 위임할 수 없습니다.");
+            throw LobbyErrorCode.HOST_TRANSFER_FORBIDDEN.exception(HttpStatus.CONFLICT);
         }
         LobbyMembership newHost = lobbyMembershipRepository
             .findByLobby_IdAndUser_IdAndStatus(lobbyId, request.newHostUserId(), LobbyMembershipStatus.ACTIVE)
-            .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "위임할 참여자를 찾을 수 없습니다."));
+            .orElseThrow(() -> LobbyErrorCode.TRANSFER_TARGET_NOT_FOUND.exception(HttpStatus.NOT_FOUND));
         if (!newHost.isParticipant()) {
-            throw new AuthException(HttpStatus.CONFLICT, "Host 권한은 Participant에게만 위임할 수 있습니다.");
+            throw LobbyErrorCode.HOST_TRANSFER_TARGET_INVALID.exception(HttpStatus.CONFLICT);
         }
 
         Instant now = Instant.now();
@@ -208,13 +207,13 @@ public class LobbyService {
             || lobby.getOrderStatus() == LobbyOrderStatus.OUT_FOR_DELIVERY
             || lobby.getOrderStatus() == LobbyOrderStatus.DELIVERED
             || lobby.isClosedOrCanceled()) {
-            throw new AuthException(HttpStatus.CONFLICT, "현재 로비 상태에서는 참여자를 강퇴할 수 없습니다.");
+            throw LobbyErrorCode.KICK_FORBIDDEN_STATE.exception(HttpStatus.CONFLICT);
         }
         LobbyMembership target = lobbyMembershipRepository
             .findByLobby_IdAndUser_IdAndStatus(lobbyId, request.targetUserId(), LobbyMembershipStatus.ACTIVE)
-            .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "강퇴할 참여자를 찾을 수 없습니다."));
+            .orElseThrow(() -> LobbyErrorCode.KICK_TARGET_NOT_FOUND.exception(HttpStatus.NOT_FOUND));
         if (!target.isParticipant()) {
-            throw new AuthException(HttpStatus.CONFLICT, "Host는 강퇴할 수 없습니다.");
+            throw LobbyErrorCode.KICK_HOST_FORBIDDEN.exception(HttpStatus.CONFLICT);
         }
 
         target.kick(Instant.now());
@@ -238,7 +237,7 @@ public class LobbyService {
         } else if (lobby.getOrderStatus() == LobbyOrderStatus.DELIVERED) {
             nextStatus = LobbyOrderStatus.CLOSED;
         } else {
-            throw new AuthException(HttpStatus.CONFLICT, "현재 상태에서는 로비를 종료할 수 없습니다.");
+            throw LobbyErrorCode.LOBBY_DELETE_FORBIDDEN.exception(HttpStatus.CONFLICT);
         }
 
         lobby.changeStatus(nextStatus, Instant.now());
@@ -249,41 +248,41 @@ public class LobbyService {
 
     private Lobby findLobby(Long lobbyId) {
         return lobbyRepository.findById(lobbyId)
-            .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "존재하지 않는 로비입니다."));
+            .orElseThrow(() -> LobbyErrorCode.LOBBY_NOT_FOUND.exception(HttpStatus.NOT_FOUND));
     }
 
     private User findUser(Long userId) {
         return userRepository.findById(userId)
-            .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "토큰이 올바르지 않습니다."));
+            .orElseThrow(() -> LobbyErrorCode.AUTH_REQUIRED.exception(HttpStatus.UNAUTHORIZED));
     }
 
     private void rejectIfUserHasActiveLobby(Long userId) {
         if (lobbyMembershipRepository.existsActiveLobbyForUser(userId)) {
-            throw new AuthException(HttpStatus.CONFLICT, "이미 참여 중인 로비가 있습니다.");
+            throw LobbyErrorCode.ACTIVE_LOBBY_EXISTS.exception(HttpStatus.CONFLICT);
         }
     }
 
     private LobbyMembership requireActiveMember(Long lobbyId, Long userId) {
         return lobbyMembershipRepository.findByLobby_IdAndUser_IdAndStatus(lobbyId, userId, LobbyMembershipStatus.ACTIVE)
-            .orElseThrow(() -> new AuthException(HttpStatus.FORBIDDEN, "해당 로비에 대한 접근 권한이 없습니다."));
+            .orElseThrow(() -> LobbyErrorCode.FORBIDDEN_ACCESS.exception(HttpStatus.FORBIDDEN));
     }
 
     private LobbyMembership requireHost(Long lobbyId, Long userId) {
         LobbyMembership membership = requireActiveMember(lobbyId, userId);
         if (!membership.isHost()) {
-            throw new AuthException(HttpStatus.FORBIDDEN, "Host 권한이 필요합니다.");
+            throw LobbyErrorCode.HOST_REQUIRED.exception(HttpStatus.FORBIDDEN);
         }
         return membership;
     }
 
     private DeliveryLocation parseDeliveryLocation(String value) {
         if (value == null || value.isBlank()) {
-            throw new AuthException(HttpStatus.BAD_REQUEST, "배달 위치가 올바르지 않습니다.");
+            throw LobbyErrorCode.INVALID_DELIVERY_LOCATION.exception(HttpStatus.BAD_REQUEST);
         }
         try {
             return DeliveryLocation.valueOf(value.trim().toUpperCase());
         } catch (IllegalArgumentException exception) {
-            throw new AuthException(HttpStatus.BAD_REQUEST, "배달 위치가 올바르지 않습니다.");
+            throw LobbyErrorCode.INVALID_DELIVERY_LOCATION.exception(HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -296,19 +295,19 @@ public class LobbyService {
 
     private LobbyOrderStatus parseOrderStatus(String value) {
         if (value == null || value.isBlank()) {
-            throw new AuthException(HttpStatus.BAD_REQUEST, "로비 상태가 올바르지 않습니다.");
+            throw LobbyErrorCode.INVALID_LOBBY_STATUS.exception(HttpStatus.BAD_REQUEST);
         }
         try {
             return LobbyOrderStatus.valueOf(value.trim().toUpperCase());
         } catch (IllegalArgumentException exception) {
-            throw new AuthException(HttpStatus.BAD_REQUEST, "로비 상태가 올바르지 않습니다.");
+            throw LobbyErrorCode.INVALID_LOBBY_STATUS.exception(HttpStatus.BAD_REQUEST);
         }
     }
 
     private void validateStatusTransition(Lobby lobby, LobbyOrderStatus nextStatus) {
         LobbyOrderStatus current = lobby.getOrderStatus();
         if (nextStatus == LobbyOrderStatus.WAITING || nextStatus == LobbyOrderStatus.LOCKED) {
-            throw new AuthException(HttpStatus.CONFLICT, "요청한 상태로 직접 변경할 수 없습니다.");
+            throw LobbyErrorCode.STATUS_DIRECT_CHANGE_FORBIDDEN.exception(HttpStatus.CONFLICT);
         }
         if (current == LobbyOrderStatus.LOCKED && nextStatus == LobbyOrderStatus.ORDER_PLACED) {
             return;
@@ -319,7 +318,7 @@ public class LobbyService {
         if (current == LobbyOrderStatus.OUT_FOR_DELIVERY && nextStatus == LobbyOrderStatus.DELIVERED) {
             return;
         }
-        throw new AuthException(HttpStatus.CONFLICT, "허용되지 않는 로비 상태 변경입니다.");
+        throw LobbyErrorCode.STATUS_TRANSITION_FORBIDDEN.exception(HttpStatus.CONFLICT);
     }
 
     private String normalizeSearchText(String value) {
@@ -327,6 +326,19 @@ public class LobbyService {
             return null;
         }
         return value.trim();
+    }
+
+    private List<Lobby> searchAvailableLobbies(DeliveryLocation location, String restaurantName) {
+        if (location != null && restaurantName != null) {
+            return lobbyRepository.findAvailableByDeliveryLocationAndRestaurantName(location, restaurantName);
+        }
+        if (location != null) {
+            return lobbyRepository.findAvailableByDeliveryLocation(location);
+        }
+        if (restaurantName != null) {
+            return lobbyRepository.findAvailableByRestaurantName(restaurantName);
+        }
+        return lobbyRepository.findAvailable();
     }
 
     private LobbySummaryResponse toSummaryResponse(Lobby lobby, Long userId) {

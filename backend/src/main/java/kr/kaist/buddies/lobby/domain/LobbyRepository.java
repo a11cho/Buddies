@@ -13,11 +13,46 @@ public interface LobbyRepository extends JpaRepository<Lobby, Long> {
         where l.orderStatus = kr.kaist.buddies.lobby.domain.LobbyOrderStatus.WAITING
           and l.cartLockedAt is null
           and l.deletedAt is null
-          and (:deliveryLocation is null or l.deliveryLocation = :deliveryLocation)
-          and (:restaurantName is null or lower(l.restaurantName) like lower(concat('%', :restaurantName, '%')))
         order by l.createdAt desc
         """)
-    List<Lobby> searchAvailable(
+    List<Lobby> findAvailable();
+
+    @Query("""
+        select l
+        from Lobby l
+        join fetch l.host
+        where l.orderStatus = kr.kaist.buddies.lobby.domain.LobbyOrderStatus.WAITING
+          and l.cartLockedAt is null
+          and l.deletedAt is null
+          and l.deliveryLocation = :deliveryLocation
+        order by l.createdAt desc
+        """)
+    List<Lobby> findAvailableByDeliveryLocation(@Param("deliveryLocation") DeliveryLocation deliveryLocation);
+
+    @Query("""
+        select l
+        from Lobby l
+        join fetch l.host
+        where l.orderStatus = kr.kaist.buddies.lobby.domain.LobbyOrderStatus.WAITING
+          and l.cartLockedAt is null
+          and l.deletedAt is null
+          and lower(l.restaurantName) like lower(concat('%', :restaurantName, '%'))
+        order by l.createdAt desc
+        """)
+    List<Lobby> findAvailableByRestaurantName(@Param("restaurantName") String restaurantName);
+
+    @Query("""
+        select l
+        from Lobby l
+        join fetch l.host
+        where l.orderStatus = kr.kaist.buddies.lobby.domain.LobbyOrderStatus.WAITING
+          and l.cartLockedAt is null
+          and l.deletedAt is null
+          and l.deliveryLocation = :deliveryLocation
+          and lower(l.restaurantName) like lower(concat('%', :restaurantName, '%'))
+        order by l.createdAt desc
+        """)
+    List<Lobby> findAvailableByDeliveryLocationAndRestaurantName(
         @Param("deliveryLocation") DeliveryLocation deliveryLocation,
         @Param("restaurantName") String restaurantName
     );

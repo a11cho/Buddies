@@ -2,7 +2,6 @@ package kr.kaist.buddies.lobby;
 
 import java.time.Instant;
 import java.util.List;
-import kr.kaist.buddies.auth.AuthException;
 import kr.kaist.buddies.lobby.CartPaymentController.CartItemRequest;
 import kr.kaist.buddies.lobby.CartPaymentController.CartItemResponse;
 import kr.kaist.buddies.lobby.CartPaymentController.DeleteCartItemResponse;
@@ -109,34 +108,34 @@ public class CartService {
 
     private Lobby findLobby(Long lobbyId) {
         return lobbyRepository.findById(lobbyId)
-            .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "존재하지 않는 로비입니다."));
+            .orElseThrow(() -> LobbyErrorCode.LOBBY_NOT_FOUND.exception(HttpStatus.NOT_FOUND));
     }
 
     private User findUser(Long userId) {
         return userRepository.findById(userId)
-            .orElseThrow(() -> new AuthException(HttpStatus.UNAUTHORIZED, "토큰이 올바르지 않습니다."));
+            .orElseThrow(() -> LobbyErrorCode.AUTH_REQUIRED.exception(HttpStatus.UNAUTHORIZED));
     }
 
     private CartItem findActiveItem(Long lobbyId, Long itemId) {
         return cartItemRepository.findByIdAndLobby_IdAndDeletedAtIsNull(itemId, lobbyId)
-            .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "장바구니 항목을 찾을 수 없습니다."));
+            .orElseThrow(() -> LobbyErrorCode.CART_ITEM_NOT_FOUND.exception(HttpStatus.NOT_FOUND));
     }
 
     private void requireActiveMember(Long lobbyId, Long userId) {
         if (lobbyMembershipRepository.findByLobby_IdAndUser_IdAndStatus(lobbyId, userId, LobbyMembershipStatus.ACTIVE).isEmpty()) {
-            throw new AuthException(HttpStatus.FORBIDDEN, "해당 로비에 대한 접근 권한이 없습니다.");
+            throw LobbyErrorCode.FORBIDDEN_ACCESS.exception(HttpStatus.FORBIDDEN);
         }
     }
 
     private void requireCartEditable(Lobby lobby) {
         if (lobby.getOrderStatus() != LobbyOrderStatus.WAITING || lobby.isCartLocked() || lobby.getDeletedAt() != null) {
-            throw new AuthException(HttpStatus.CONFLICT, "현재 로비에서는 장바구니를 변경할 수 없습니다.");
+            throw LobbyErrorCode.CART_NOT_EDITABLE.exception(HttpStatus.CONFLICT);
         }
     }
 
     private void requireOwner(CartItem item, Long userId) {
         if (!item.getOwner().getId().equals(userId)) {
-            throw new AuthException(HttpStatus.FORBIDDEN, "장바구니 항목 소유자만 변경할 수 있습니다.");
+            throw LobbyErrorCode.CART_ITEM_OWNER_REQUIRED.exception(HttpStatus.FORBIDDEN);
         }
     }
 

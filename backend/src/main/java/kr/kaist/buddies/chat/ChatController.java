@@ -6,7 +6,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.security.Principal;
 import java.util.List;
-import kr.kaist.buddies.auth.AuthException;
 import kr.kaist.buddies.auth.AuthenticatedUser;
 import kr.kaist.buddies.auth.CurrentUser;
 import org.springframework.http.HttpStatus;
@@ -105,6 +104,6 @@ public class ChatController {
         if (principal instanceof Authentication authentication && authentication.getPrincipal() instanceof AuthenticatedUser user) {
             return user;
         }
-        throw new AuthException(HttpStatus.UNAUTHORIZED, "토큰이 필요합니다.");
+        throw ChatErrorCode.AUTH_REQUIRED.exception(HttpStatus.UNAUTHORIZED);
     }
 }
