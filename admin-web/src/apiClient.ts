@@ -3,6 +3,7 @@ export type SystemOverview = {
   cartLockedLobbyCount: number;
   activeUserCount: number;
   openReportCount: number;
+  openSupportTicketCount: number;
   suspendedUserCount: number;
   recentLobbies: RecentLobby[];
 };
@@ -114,6 +115,40 @@ export type ModerationAction = {
   createdAt: string;
 };
 
+export type SupportTicketPage = {
+  items: SupportTicketSummary[];
+  page: number;
+  size: number;
+  totalCount: number;
+};
+
+export type SupportTicketSummary = {
+  ticketId: number;
+  userId: number;
+  userName: string;
+  lobbyId: number | null;
+  category: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SupportTicketDetail = {
+  ticketId: number;
+  user: UserReference;
+  lobbyId: number | null;
+  category: string;
+  title: string;
+  body: string;
+  status: string;
+  resolutionNote: string | null;
+  resolvedByAdmin: UserReference | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type RequestOptions = {
   token?: string;
   query?: Record<string, string | number | boolean | undefined>;
@@ -146,6 +181,25 @@ export class ApiClient {
       ...options,
       method: 'PATCH',
       body: { resolutionNote },
+    });
+  }
+
+  async getSupportTickets(status = 'OPEN', page = 1, size = 20, options: RequestOptions = {}): Promise<SupportTicketPage> {
+    return this.request<SupportTicketPage>('/admin/support-tickets', {
+      ...options,
+      query: { status, page, size },
+    });
+  }
+
+  async getSupportTicket(ticketId: number, options: RequestOptions = {}): Promise<SupportTicketDetail> {
+    return this.request<SupportTicketDetail>(`/admin/support-tickets/${ticketId}`, options);
+  }
+
+  async updateSupportTicket(ticketId: number, status: string, resolutionNote: string, options: RequestOptions = {}): Promise<MessageResponse> {
+    return this.request<MessageResponse>(`/admin/support-tickets/${ticketId}`, {
+      ...options,
+      method: 'PATCH',
+      body: { status, resolutionNote: resolutionNote || undefined },
     });
   }
 

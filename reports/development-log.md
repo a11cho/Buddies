@@ -1095,3 +1095,92 @@
 - Lobby 모듈의 placeholder 로직을 실제 service/repository 기반 구현으로 확장
 - Cart Locking 시 요청자가 실제 Host인지 검증하는 기존 Lobby 권한 로직과 계좌 정보 검증을 통합
 - Mobile app에 계좌 정보 등록 화면과 Lobby detail 결제 섹션 UI 연결
+
+## 2026-06-02
+
+### Direct Contact 지원 문의 관리자 처리 기능 추가 및 SDD 반영
+
+#### 목적
+
+기존 사용자 API `POST /support/tickets`로 FAQ에서 해결되지 않은 문의를 생성할 수 있었지만, Admin Web에는 해당 문의를 조회하고 처리할 수 있는 화면과 Admin API가 없어 운영 대응이 불가능했다. 이에 support ticket 관리자 목록/상세/상태 갱신 API와 Admin Web Tickets 화면을 추가하고, 관련 SDD 문서를 최신 구현에 맞게 갱신했다.
+
+#### 주요 변경 사항
+
+- Admin 지원 문의 API 추가
+  - `GET /admin/support-tickets?status=OPEN&page=1&size=20` 추가
+  - `GET /admin/support-tickets/{ticketId}` 추가
+  - `PATCH /admin/support-tickets/{ticketId}` 추가
+  - `OPEN`, `IN_PROGRESS`, `RESOLVED` 상태 필터와 pagination 적용
+  - 문의 상세 조회 시 제출 사용자, 관련 lobby ID, category, title, body, status, 처리 메모, 처리 Admin, 처리 시각 반환
+  - `RESOLVED`로 변경할 때 `resolutionNote`를 필수로 검증
+  - 상세 조회와 상태 갱신 시 `admin_audit_logs`에 `VIEW_SUPPORT_TICKET`, `UPDATE_SUPPORT_TICKET` 기록
+
+- support_tickets 처리 컬럼 및 인덱스 추가
+  - Flyway migration `V7__support_ticket_admin_resolution.sql` 추가
+  - `support_tickets.resolution_note` 추가
+  - `support_tickets.resolved_by_admin_id` 추가
+  - `support_tickets.resolved_at` 추가
+  - Admin 목록 필터링을 위한 `idx_support_tickets_status_created_at` 인덱스 추가
+
+- Admin overview 통계 보강
+  - `/admin/system/overview` 응답에 `openSupportTicketCount` 추가
+  - `OPEN`, `IN_PROGRESS` 상태 문의를 미처리 문의로 집계
+  - Admin Web Overview에 `Open Tickets` metric 표시
+
+- Admin Web Tickets 화면 추가
+  - sidebar에 `Tickets` 탭 추가
+  - 문의 상태 필터 `OPEN`, `IN_PROGRESS`, `RESOLVED` 추가
+  - 문의 목록과 선택된 문의 상세 패널 추가
+  - 상세 패널에 제출 사용자, 관련 lobby ID, category, title, body, 처리 Admin 표시
+  - 처리 상태와 처리 메모를 입력해 문의 상태를 갱신하는 폼 추가
+  - 처리 성공 후 문의 목록과 overview 통계 재조회
+
+- Admin Web API client 확장
+  - `SupportTicketPage`, `SupportTicketSummary`, `SupportTicketDetail` TypeScript 타입 추가
+  - `getSupportTickets()`, `getSupportTicket()`, `updateSupportTicket()` 추가
+
+- SDD 문서 갱신
+  - `6_관리자_사용자조정&계정관리&모니터링.md`에 Direct Contact 지원 문의 처리 시스템, API, DB, 감사 로그, 시퀀스 추가
+  - `7_API_목록_정리.md`에 Admin support ticket API 3개 추가
+  - `8_DB_목록_정리.md`와 `2_프로필&이력&평가&도움말.md`의 `support_tickets` 컬럼 설명 갱신
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminController.java`
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminService.java`
+- `backend/src/main/resources/db/migration/V7__support_ticket_admin_resolution.sql`
+- `admin-web/src/apiClient.ts`
+- `admin-web/src/main.tsx`
+- `admin-web/src/styles.css`
+- `buddies-doc/SDD/2_프로필&이력&평가&도움말.md`
+- `buddies-doc/SDD/6_관리자_사용자조정&계정관리&모니터링.md`
+- `buddies-doc/SDD/7_API_목록_정리.md`
+- `buddies-doc/SDD/8_DB_목록_정리.md`
+- `reports/development-log.md`
+
+#### SRS/SDD 충족 확인
+
+- Direct Contact 문의 운영 대응
+  - 사용자가 생성한 `support_tickets`를 Admin이 조회하고 상태를 갱신할 수 있도록 Admin API와 화면을 연결
+  - 문의를 삭제하지 않고 처리 메모, 처리자, 처리 시각을 보관
+
+- Admin 시스템 모니터링
+  - Admin overview에서 미처리 support ticket 수를 확인할 수 있도록 `openSupportTicketCount` 추가
+
+- Admin 감사 로그
+  - 지원 문의 상세 조회와 상태 갱신 작업을 `admin_audit_logs`에 기록
+
+#### 검증
+
+- `admin-web`에서 `npm.cmd install` 실행 후 dependency 설치 성공
+- `admin-web`에서 `npm.cmd run build` 성공
+- 최초 `npm run build`는 PowerShell 실행 정책과 Vite/esbuild sandbox 읽기 제한으로 실패했으나, `npm.cmd`와 승인된 빌드 실행으로 검증 완료
+- 현재 환경에는 `mvnw`와 `mvn` 명령이 없어 Maven build/test는 수행하지 못했다.
+- `rg`로 Admin support ticket API, `openSupportTicketCount`, `resolution_note`, SDD support ticket 문서 반영 위치를 확인했다.
+
+#### 남은 작업
+
+- Maven wrapper 추가 또는 Maven 설치 후 backend compile/test 실행
+- 실제 DB migration 적용 후 support ticket 목록/상세/상태 갱신 end-to-end 확인
+- 실제 ADMIN 계정 JWT로 Admin Web Tickets 탭에서 문의 처리 흐름 확인
+- 사용자 앱에서 처리 완료된 문의 상태 또는 답변을 사용자에게 다시 보여줄지 정책 결정

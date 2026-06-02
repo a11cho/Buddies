@@ -11,6 +11,9 @@ import {
   type ReportDetail,
   type ReportPage,
   type ReportSummary,
+  type SupportTicketDetail,
+  type SupportTicketPage,
+  type SupportTicketSummary,
   type SystemOverview,
 } from './apiClient';
 import './styles.css';
@@ -18,7 +21,7 @@ import './styles.css';
 const apiClient = new ApiClient();
 const tokenStorageKey = 'buddies.admin.accessToken';
 
-type View = 'overview' | 'reports' | 'users' | 'archive';
+type View = 'overview' | 'reports' | 'tickets' | 'users' | 'archive';
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(tokenStorageKey) ?? '');
@@ -27,11 +30,14 @@ function App() {
   const [overview, setOverview] = useState<SystemOverview | null>(null);
   const [reports, setReports] = useState<ReportPage | null>(null);
   const [selectedReport, setSelectedReport] = useState<ReportDetail | null>(null);
+  const [tickets, setTickets] = useState<SupportTicketPage | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicketDetail | null>(null);
   const [users, setUsers] = useState<AdminUserPage | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserDetail | null>(null);
   const [userStatus, setUserStatus] = useState('ACTIVE');
   const [archive, setArchive] = useState<ChatArchive | null>(null);
   const [status, setStatus] = useState('OPEN');
+  const [ticketStatus, setTicketStatus] = useState('OPEN');
   const [archiveLobbyId, setArchiveLobbyId] = useState('');
   const [message, setMessage] = useState('');
   const [loginMessage, setLoginMessage] = useState('');
@@ -56,6 +62,7 @@ function App() {
       setLoginMessage('');
       await loadOverview(nextToken);
       await loadReports(status, nextToken);
+      await loadTickets(ticketStatus, nextToken);
       await loadUsers(userStatus, nextToken);
     } catch (error) {
       clearSession();
@@ -77,6 +84,7 @@ function App() {
       setToken(response.accessToken);
       await loadOverview(response.accessToken);
       await loadReports(status, response.accessToken);
+      await loadTickets(ticketStatus, response.accessToken);
       await loadUsers(userStatus, response.accessToken);
     } catch (error) {
       clearSession();
@@ -93,6 +101,8 @@ function App() {
     setOverview(null);
     setReports(null);
     setSelectedReport(null);
+    setTickets(null);
+    setSelectedTicket(null);
     setUsers(null);
     setSelectedUser(null);
     setArchive(null);
@@ -126,6 +136,42 @@ function App() {
       const detail = await apiClient.getReport(report.reportId, { token: nextToken });
       setSelectedReport(detail);
       setArchive(await apiClient.getChatArchive(detail.lobbyId, { token: nextToken }));
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  async function loadTickets(nextStatus = ticketStatus, nextToken = token) {
+    try {
+      const page = await apiClient.getSupportTickets(nextStatus, 1, 20, { token: nextToken });
+      setTickets(page);
+      if (page.items.length > 0) {
+        await selectTicket(page.items[0], nextToken);
+      } else {
+        setSelectedTicket(null);
+      }
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  async function selectTicket(ticket: SupportTicketSummary, nextToken = token) {
+    try {
+      setSelectedTicket(await apiClient.getSupportTicket(ticket.ticketId, { token: nextToken }));
+    } catch (error) {
+      setMessage(errorMessage(error));
+    }
+  }
+
+  async function updateSelectedTicket(nextStatus: string, resolutionNote: string) {
+    if (!selectedTicket) {
+      return;
+    }
+    try {
+      await apiClient.updateSupportTicket(selectedTicket.ticketId, nextStatus, resolutionNote, authOptions);
+      setMessage(`Support ticket #${selectedTicket.ticketId} updated.`);
+      await loadTickets(ticketStatus);
+      await loadOverview();
     } catch (error) {
       setMessage(errorMessage(error));
     }
@@ -206,6 +252,7 @@ function App() {
         <nav>
           <button className={view === 'overview' ? 'active' : ''} onClick={() => setView('overview')}>Overview</button>
           <button className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>Reports</button>
+          <button className={view === 'tickets' ? 'active' : ''} onClick={() => setView('tickets')}>Tickets</button>
           <button className={view === 'users' ? 'active' : ''} onClick={() => setView('users')}>Users</button>
           <button className={view === 'archive' ? 'active' : ''} onClick={() => setView('archive')}>Chat Archive</button>
         </nav>
@@ -238,6 +285,19 @@ function App() {
             }}
             onSelect={selectReport}
             onResolve={resolveSelectedReport}
+          />
+        )}
+        {view === 'tickets' && (
+          <Tickets
+            tickets={tickets}
+            selectedTicket={selectedTicket}
+            status={ticketStatus}
+            onStatusChange={(nextStatus) => {
+              setTicketStatus(nextStatus);
+              loadTickets(nextStatus);
+            }}
+            onSelect={selectTicket}
+            onUpdate={updateSelectedTicket}
           />
         )}
         {view === 'users' && (
@@ -323,6 +383,7 @@ function Overview({ overview }: { overview: SystemOverview | null }) {
       <div className="metrics">
         <Metric label="Active Lobbies" value={overview?.activeLobbyCount} />
         <Metric label="Open Reports" value={overview?.openReportCount} />
+        <Metric label="Open Tickets" value={overview?.openSupportTicketCount} />
         <Metric label="Active Users" value={overview?.activeUserCount} />
         <Metric label="Cart Locked" value={overview?.cartLockedLobbyCount} />
       </div>
@@ -354,6 +415,112 @@ function Overview({ overview }: { overview: SystemOverview | null }) {
         </table>
       </section>
     </>
+  );
+}
+
+function Tickets(props: {
+  tickets: SupportTicketPage | null;
+  selectedTicket: SupportTicketDetail | null;
+  status: string;
+  onStatusChange: (status: string) => void;
+  onSelect: (ticket: SupportTicketSummary) => void;
+  onUpdate: (status: string, resolutionNote: string) => void;
+}) {
+  const [nextStatus, setNextStatus] = useState(props.selectedTicket?.status ?? 'IN_PROGRESS');
+  const [resolutionNote, setResolutionNote] = useState(props.selectedTicket?.resolutionNote ?? '');
+
+  useEffect(() => {
+    setNextStatus(props.selectedTicket?.status === 'RESOLVED' ? 'RESOLVED' : 'IN_PROGRESS');
+    setResolutionNote(props.selectedTicket?.resolutionNote ?? '');
+  }, [props.selectedTicket?.ticketId, props.selectedTicket?.status, props.selectedTicket?.resolutionNote]);
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    props.onUpdate(nextStatus, resolutionNote.trim());
+  }
+
+  return (
+    <div className="review-grid">
+      <section className="panel">
+        <div className="panel-head">
+          <h3>Support Tickets</h3>
+          <select value={props.status} onChange={(event) => props.onStatusChange(event.target.value)}>
+            <option value="OPEN">OPEN</option>
+            <option value="IN_PROGRESS">IN_PROGRESS</option>
+            <option value="RESOLVED">RESOLVED</option>
+          </select>
+        </div>
+        <div className="report-list">
+          {(props.tickets?.items ?? []).map((ticket) => (
+            <button
+              key={ticket.ticketId}
+              className={props.selectedTicket?.ticketId === ticket.ticketId ? 'report-row selected' : 'report-row'}
+              onClick={() => props.onSelect(ticket)}
+            >
+              <strong>#{ticket.ticketId} {ticket.title}</strong>
+              <span>{ticket.category} - {ticket.userName}</span>
+              <span>{ticket.lobbyId ? `Lobby ${ticket.lobbyId}` : 'No lobby linked'}</span>
+              <small>{formatDate(ticket.createdAt)}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="panel detail">
+        {props.selectedTicket ? (
+          <>
+            <div className="panel-head">
+              <h3>Ticket #{props.selectedTicket.ticketId}</h3>
+              <span className="status">{props.selectedTicket.status}</span>
+            </div>
+            <dl>
+              <dt>User</dt>
+              <dd>{props.selectedTicket.user.name} ({props.selectedTicket.user.id})</dd>
+              <dt>Lobby</dt>
+              <dd>{props.selectedTicket.lobbyId ?? '-'}</dd>
+              <dt>Category</dt>
+              <dd>{props.selectedTicket.category}</dd>
+              <dt>Title</dt>
+              <dd>{props.selectedTicket.title}</dd>
+              <dt>Created</dt>
+              <dd>{formatDate(props.selectedTicket.createdAt)}</dd>
+              <dt>Resolved By</dt>
+              <dd>{props.selectedTicket.resolvedByAdmin ? `${props.selectedTicket.resolvedByAdmin.name} (${props.selectedTicket.resolvedByAdmin.id})` : '-'}</dd>
+            </dl>
+            <section className="ticket-body">
+              <h3>Question</h3>
+              <p>{props.selectedTicket.body}</p>
+            </section>
+            <form className="moderation-form" onSubmit={submit}>
+              <div className="panel-head">
+                <h3>Response</h3>
+              </div>
+              <label>
+                Status
+                <select value={nextStatus} onChange={(event) => setNextStatus(event.target.value)}>
+                  <option value="OPEN">OPEN</option>
+                  <option value="IN_PROGRESS">IN_PROGRESS</option>
+                  <option value="RESOLVED">RESOLVED</option>
+                </select>
+              </label>
+              <label>
+                Resolution Note
+                <textarea
+                  required={nextStatus === 'RESOLVED'}
+                  placeholder="Leave the handling note or final answer."
+                  value={resolutionNote}
+                  onChange={(event) => setResolutionNote(event.target.value)}
+                />
+              </label>
+              <button className="primary" disabled={nextStatus === 'RESOLVED' && !resolutionNote.trim()}>
+                Update Ticket
+              </button>
+            </form>
+          </>
+        ) : (
+          <p className="empty">No support tickets in this filter.</p>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -622,7 +789,15 @@ function Metric({ label, value }: { label: string; value?: number }) {
 }
 
 function viewLabel(view: View) {
-  return view === 'overview' ? 'System Overview' : view === 'reports' ? 'Report Review' : view === 'users' ? 'User Management' : 'Chat Archive';
+  return view === 'overview'
+    ? 'System Overview'
+    : view === 'reports'
+      ? 'Report Review'
+      : view === 'tickets'
+        ? 'Support Tickets'
+        : view === 'users'
+          ? 'User Management'
+          : 'Chat Archive';
 }
 
 function formatDate(value?: string) {
