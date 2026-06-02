@@ -7,12 +7,13 @@ class BuddiesApiClient {
   BuddiesApiClient({
     String baseUrl = const String.fromEnvironment(
       'API_BASE_URL',
-      defaultValue: 'http://10.0.2.2:8080/api',
+      defaultValue: 'https://10.0.2.2:8443/api',
     ),
     HttpClient? httpClient,
   })  : _baseUri = Uri.parse(baseUrl),
         _httpClient = httpClient ?? HttpClient() {
     _assertSecureBaseUri(_baseUri);
+    _allowLocalDevelopmentCertificate();
   }
 
   final Uri _baseUri;
@@ -39,7 +40,7 @@ class BuddiesApiClient {
     await _requestJson(
       '/auth/signup/verify',
       method: 'POST',
-      body: {'email': email, 'otp': sha256Hex(otp)},
+      body: {'email': email, 'otp': otp},
     );
   }
 
@@ -110,6 +111,17 @@ class BuddiesApiClient {
     if (uri.scheme != 'https' && !isLocalhost) {
       throw StateError('Buddies API requires HTTPS for non-local network communication.');
     }
+  }
+
+  void _allowLocalDevelopmentCertificate() {
+    if (_baseUri.scheme != 'https') {
+      return;
+    }
+    final isLocalhost = _baseUri.host == 'localhost' || _baseUri.host == '127.0.0.1' || _baseUri.host == '10.0.2.2';
+    if (!isLocalhost) {
+      return;
+    }
+    _httpClient.badCertificateCallback = (certificate, host, port) => host == _baseUri.host && port == _baseUri.port;
   }
 }
 

@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.util.List;
+import kr.kaist.buddies.auth.AuthenticatedUser;
+import kr.kaist.buddies.auth.CurrentUser;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -15,35 +17,61 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/lobbies/{lobbyId}")
+@RequestMapping("/lobbies/{lobbyId}")
 public class CartPaymentController {
+    private final CartService cartService;
+    private final PaymentService paymentService;
+
+    public CartPaymentController(CartService cartService, PaymentService paymentService) {
+        this.cartService = cartService;
+        this.paymentService = paymentService;
+    }
+
+    @GetMapping("/cart-items")
+    public List<CartItemResponse> listItems(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+        return cartService.listItems(user.id(), lobbyId);
+    }
+
     @PostMapping("/cart-items")
-    public CartItemResponse addItem(@PathVariable Long lobbyId, @Valid @RequestBody CartItemRequest request) {
-        return new CartItemResponse(1L, lobbyId, request.itemName(), request.quantity(), request.unitPrice(), request.unitPrice() * request.quantity());
+    public CartItemResponse addItem(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @Valid @RequestBody CartItemRequest request) {
+        return cartService.addItem(user.id(), lobbyId, request);
     }
 
     @PatchMapping("/cart-items/{itemId}")
-    public CartItemResponse updateItem(@PathVariable Long lobbyId, @PathVariable Long itemId, @Valid @RequestBody CartItemRequest request) {
-        return new CartItemResponse(itemId, lobbyId, request.itemName(), request.quantity(), request.unitPrice(), request.unitPrice() * request.quantity());
+    public CartItemResponse updateItem(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @PathVariable Long itemId, @Valid @RequestBody CartItemRequest request) {
+        return cartService.updateItem(user.id(), lobbyId, itemId, request);
     }
 
     @DeleteMapping("/cart-items/{itemId}")
-    public MessageResponse deleteItem(@PathVariable Long lobbyId, @PathVariable Long itemId) {
-        return new MessageResponse("Cart item " + itemId + " deleted from lobby " + lobbyId);
+    public DeleteCartItemResponse deleteItem(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @PathVariable Long itemId) {
+        return cartService.deleteItem(user.id(), lobbyId, itemId);
     }
 
     @GetMapping("/payment-records")
-    public List<PaymentRecordResponse> paymentRecords(@PathVariable Long lobbyId) {
-        return List.of();
+    public List<PaymentRecordResponse> paymentRecords(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+        return paymentService.list(user.id(), lobbyId);
     }
 
     @PostMapping("/payment-records/{paymentRecordId}/confirm")
-    public MessageResponse confirmPayment(@PathVariable Long lobbyId, @PathVariable Long paymentRecordId) {
-        return new MessageResponse("Payment " + paymentRecordId + " confirmed for lobby " + lobbyId);
+    public PaymentRecordResponse confirmPayment(
+        @CurrentUser AuthenticatedUser user,
+        @PathVariable Long lobbyId,
+        @PathVariable Long paymentRecordId
+    ) {
+        return paymentService.confirm(user.id(), lobbyId, paymentRecordId);
     }
 
-    public record CartItemRequest(@NotBlank String itemName, @Positive long unitPrice, @Positive int quantity) {}
-    public record CartItemResponse(Long id, Long lobbyId, String itemName, int quantity, long unitPrice, long subtotal) {}
-    public record PaymentRecordResponse(Long id, Long userId, long amount, String status) {}
+    public record CartItemRequest(@NotBlank String itemName, @NotNull @Positive Long unitPrice, @NotNull @Positive Integer quantity) {}
+    public record CartItemResponse(Long cartItemId, Long lobbyId, Long ownerUserId, String itemName, long unitPrice, int quantity, long subtotal, long currentTotalAmount) {}
+    public record DeleteCartItemResponse(Long cartItemId, Long lobbyId, String deletedAt, long currentTotalAmount) {}
+    public record PaymentRecordResponse(
+        Long paymentRecordId,
+        Long lobbyId,
+        Long userId,
+        long amount,
+        String status,
+        Long confirmedByHostId,
+        String confirmedAt
+    ) {}
     public record MessageResponse(String message) {}
 }

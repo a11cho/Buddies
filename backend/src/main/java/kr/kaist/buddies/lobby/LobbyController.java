@@ -5,68 +5,79 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.util.List;
-import org.springframework.web.bind.annotation.GetMapping;
+import kr.kaist.buddies.auth.AuthenticatedUser;
+import kr.kaist.buddies.auth.CurrentUser;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/lobbies")
+@RequestMapping("/lobbies")
 public class LobbyController {
+    private final LobbyService lobbyService;
+
+    public LobbyController(LobbyService lobbyService) {
+        this.lobbyService = lobbyService;
+    }
+
     @GetMapping
-    public List<LobbySummaryResponse> list() {
-        return List.of();
+    public List<LobbySummaryResponse> list(
+        @CurrentUser AuthenticatedUser user,
+        @RequestParam(required = false) String deliveryLocation,
+        @RequestParam(required = false) String restaurantName
+    ) {
+        return lobbyService.list(user.id(), deliveryLocation, restaurantName);
     }
 
     @PostMapping
-    public LobbyResponse create(@Valid @RequestBody CreateLobbyRequest request) {
-        // TODO: Read host user id from JWT and enforce one active lobby per user.
-        return new LobbyResponse(1L, request.restaurantName(), request.deliveryLocation(), "WAITING", false, 0L, request.minimumOrderAmount());
+    public LobbyResponse create(@CurrentUser AuthenticatedUser user, @Valid @RequestBody CreateLobbyRequest request) {
+        return lobbyService.create(user.id(), request);
     }
 
     @GetMapping("/{lobbyId}")
-    public LobbyResponse get(@PathVariable Long lobbyId) {
-        return new LobbyResponse(lobbyId, "Sample Restaurant", "KAIST", "WAITING", false, 0L, 23000L);
+    public LobbyResponse get(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+        return lobbyService.get(user.id(), lobbyId);
     }
 
     @PostMapping("/{lobbyId}/join")
-    public MessageResponse join(@PathVariable Long lobbyId) {
-        return new MessageResponse("Joined lobby " + lobbyId);
+    public LobbyMembershipResponse join(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+        return lobbyService.join(user.id(), lobbyId);
     }
 
     @PostMapping("/{lobbyId}/leave")
-    public MessageResponse leave(@PathVariable Long lobbyId) {
-        return new MessageResponse("Left lobby " + lobbyId);
+    public LobbyMembershipResponse leave(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+        return lobbyService.leave(user.id(), lobbyId);
     }
 
     @PostMapping("/{lobbyId}/cart/lock")
-    public MessageResponse lockCart(@PathVariable Long lobbyId) {
-        return new MessageResponse("Cart locked for lobby " + lobbyId);
+    public LockCartResponse lockCart(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+        return lobbyService.lockCart(user.id(), lobbyId);
     }
 
     @PatchMapping("/{lobbyId}/status")
-    public MessageResponse updateStatus(@PathVariable Long lobbyId, @Valid @RequestBody UpdateLobbyStatusRequest request) {
-        return new MessageResponse("Lobby " + lobbyId + " status changed to " + request.newStatus());
+    public LobbyStatusResponse updateStatus(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @Valid @RequestBody UpdateLobbyStatusRequest request) {
+        return lobbyService.updateStatus(user.id(), lobbyId, request);
     }
 
     @PostMapping("/{lobbyId}/transfer-host")
-    public MessageResponse transferHost(@PathVariable Long lobbyId, @Valid @RequestBody TransferHostRequest request) {
-        return new MessageResponse("Lobby " + lobbyId + " host transferred to " + request.newHostUserId());
+    public TransferHostResponse transferHost(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @Valid @RequestBody TransferHostRequest request) {
+        return lobbyService.transferHost(user.id(), lobbyId, request);
     }
 
     @PostMapping("/{lobbyId}/kick")
-    public MessageResponse kick(@PathVariable Long lobbyId, @Valid @RequestBody KickMemberRequest request) {
-        return new MessageResponse("User " + request.targetUserId() + " kicked from lobby " + lobbyId);
+    public KickParticipantResponse kick(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId, @Valid @RequestBody KickMemberRequest request) {
+        return lobbyService.kick(user.id(), lobbyId, request);
     }
 
     @DeleteMapping("/{lobbyId}")
-    public MessageResponse delete(@PathVariable Long lobbyId) {
-        // TODO: Finalize cart item retention policy for CLOSED/CANCELED lobbies.
-        return new MessageResponse("Lobby " + lobbyId + " closed or canceled");
+    public DeleteLobbyResponse delete(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+        return lobbyService.delete(user.id(), lobbyId);
     }
 
     public record CreateLobbyRequest(
@@ -78,7 +89,56 @@ public class LobbyController {
     public record UpdateLobbyStatusRequest(@NotBlank String newStatus) {}
     public record TransferHostRequest(@NotNull Long newHostUserId) {}
     public record KickMemberRequest(@NotNull Long targetUserId, String reason) {}
-    public record LobbySummaryResponse(Long id, String restaurantName, String deliveryLocation, String orderStatus, boolean cartLocked) {}
-    public record LobbyResponse(Long id, String restaurantName, String deliveryLocation, String orderStatus, boolean cartLocked, long currentTotalAmount, long minimumOrderAmount) {}
+    public record LobbySummaryResponse(
+        Long lobbyId,
+        Long hostUserId,
+        String hostName,
+        double hostTrustScore,
+        String restaurantName,
+        String deliveryLocation,
+        long minimumOrderAmount,
+        long currentTotalAmount,
+        long remainingAmount,
+        long participantCount,
+        String orderStatus,
+        Long lastReadMessageId,
+        long unreadCount
+    ) {}
+    public record LobbyResponse(
+        Long lobbyId,
+        Long hostUserId,
+        String restaurantName,
+        String deliveryLocation,
+        long minimumOrderAmount,
+        long currentTotalAmount,
+        long deliveryFee,
+        long participantCount,
+        String orderStatus,
+        String cartLockedAt,
+        Long lastReadMessageId,
+        long unreadCount,
+        String hostBankName,
+        String hostAccountNumber,
+        String hostAccountHolderName
+    ) {}
+    public record LobbyMembershipResponse(
+        Long lobbyId,
+        Long userId,
+        String roleInLobby,
+        String membershipStatus,
+        String joinedAt,
+        String leftAt
+    ) {}
+    public record LockCartResponse(Long lobbyId, String previousStatus, String orderStatus, String cartLockedAt) {}
+    public record LobbyStatusResponse(Long lobbyId, String previousStatus, String newStatus) {}
+    public record KickParticipantResponse(Long lobbyId, Long kickedUserId, String membershipStatus, Long kickedBy) {}
+    public record TransferHostResponse(
+        Long lobbyId,
+        Long previousHostUserId,
+        Long newHostUserId,
+        String previousHostMembershipStatus,
+        String newHostRole
+    ) {}
+    public record DeleteLobbyResponse(Long lobbyId, String previousStatus, String newStatus, String deletedAt) {}
     public record MessageResponse(String message) {}
 }
