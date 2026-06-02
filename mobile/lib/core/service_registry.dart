@@ -1,5 +1,6 @@
 import '../mock/mock_services.dart';
 import '../services/services.dart';
+import 'api_client.dart';
 import 'mock_mode.dart';
 import 'token_storage.dart';
 
@@ -7,6 +8,11 @@ import 'token_storage.dart';
 // mock인지 실제 API인지 교체하는 일은 이 파일에서만 처리합니다.
 class AppServices {
   AppServices._();
+
+  static final TokenStorage tokenStorage = InMemoryTokenStorage();
+  static final ApiClient apiClient = ApiClientFactory.create(
+    tokenStorage: tokenStorage,
+  );
 
   static final AuthService authService = _buildAuthService();
   static final UserService userService = _buildUserService();
@@ -17,7 +23,6 @@ class AppServices {
   static final ReportService reportService = _buildReportService();
   static final RatingService ratingService = _buildRatingService();
   static final HelpService helpService = _buildHelpService();
-  static final TokenStorage tokenStorage = InMemoryTokenStorage();
 
   static AuthService _buildAuthService() {
     if (useMockMode) {
