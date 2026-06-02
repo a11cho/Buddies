@@ -81,6 +81,30 @@ public class AdminController {
         return adminService.users(status, page, size);
     }
 
+    @GetMapping("/admin/support-tickets")
+    public SupportTicketPageResponse supportTickets(
+        @RequestParam(required = false) String status,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "20") int size
+    ) {
+        return adminService.supportTickets(status, page, size);
+    }
+
+    @GetMapping("/admin/support-tickets/{ticketId}")
+    public SupportTicketDetailResponse supportTicket(@CurrentUser AuthenticatedUser admin, @PathVariable Long ticketId) {
+        return adminService.supportTicket(admin, ticketId);
+    }
+
+    @PatchMapping("/admin/support-tickets/{ticketId}")
+    public MessageResponse updateSupportTicket(
+        @CurrentUser AuthenticatedUser admin,
+        @PathVariable Long ticketId,
+        @Valid @RequestBody UpdateSupportTicketRequest request
+    ) {
+        adminService.updateSupportTicket(admin, ticketId, request);
+        return new MessageResponse("Support ticket has been updated.");
+    }
+
     @GetMapping("/admin/users/{userId}")
     public AdminUserDetailResponse user(@CurrentUser AuthenticatedUser admin, @PathVariable Long userId) {
         return adminService.user(admin, userId);
@@ -105,6 +129,7 @@ public class AdminController {
     public record CreateReportRequest(@NotNull Long lobbyId, @NotNull Long reportedUserId, Long reportedMessageId, @NotBlank String reason, String description) {}
     public record ResolveReportRequest(String resolutionNote) {}
     public record ModerationActionRequest(@NotBlank String actionType, @NotBlank String reason, String endsAt, Long reportId) {}
+    public record UpdateSupportTicketRequest(@NotBlank String status, String resolutionNote) {}
     public record UserReference(Long id, String name) {}
     public record ReportSummaryResponse(Long reportId, Long lobbyId, Long reporterUserId, Long reportedUserId, String reason, String status, String createdAt) {}
     public record ReportPageResponse(List<ReportSummaryResponse> items, int page, int size, long totalCount) {}
@@ -119,6 +144,32 @@ public class AdminController {
         String status,
         String resolutionNote,
         String createdAt
+    ) {}
+    public record SupportTicketSummaryResponse(
+        Long ticketId,
+        Long userId,
+        String userName,
+        Long lobbyId,
+        String category,
+        String title,
+        String status,
+        String createdAt,
+        String updatedAt
+    ) {}
+    public record SupportTicketPageResponse(List<SupportTicketSummaryResponse> items, int page, int size, long totalCount) {}
+    public record SupportTicketDetailResponse(
+        Long ticketId,
+        UserReference user,
+        Long lobbyId,
+        String category,
+        String title,
+        String body,
+        String status,
+        String resolutionNote,
+        UserReference resolvedByAdmin,
+        String resolvedAt,
+        String createdAt,
+        String updatedAt
     ) {}
     public record ChatArchiveResponse(Long lobbyId, List<ArchiveMessageResponse> messages) {}
     public record ArchiveMessageResponse(
@@ -155,6 +206,7 @@ public class AdminController {
         long cartLockedLobbyCount,
         long activeUserCount,
         long openReportCount,
+        long openSupportTicketCount,
         long suspendedUserCount,
         List<RecentLobbyResponse> recentLobbies
     ) {}

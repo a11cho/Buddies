@@ -157,6 +157,7 @@ public class AdminService {
         );
         Long activeUserCount = jdbcTemplate.queryForObject("select count(*) from users where status = 'ACTIVE'", Long.class);
         Long suspendedUserCount = jdbcTemplate.queryForObject("select count(*) from users where status = 'SUSPENDED'", Long.class);
+        Long openSupportTicketCount = jdbcTemplate.queryForObject("select count(*) from support_tickets where status in ('OPEN', 'IN_PROGRESS')", Long.class);
         List<AdminController.RecentLobbyResponse> recentLobbies = jdbcTemplate.query(
             """
             select l.id, l.restaurant_name, l.delivery_location, l.host_user_id,
@@ -185,9 +186,130 @@ public class AdminService {
             nullToZero(lockedLobbyCount),
             nullToZero(activeUserCount),
             reportRepository.countByStatus(ReportStatus.OPEN),
+            nullToZero(openSupportTicketCount),
             nullToZero(suspendedUserCount),
             recentLobbies
         );
+    }
+
+    @Transactional(readOnly = true)
+    public AdminController.SupportTicketPageResponse supportTickets(String status, int page, int size) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        boolean filtered = status != null && !status.isBlank();
+        String normalizedStatus = filtered ? parseSupportTicketStatus(status) : null;
+        String sql = !filtered
+            ? """
+              select st.id, st.user_id, u.name as user_name, st.lobby_id, st.category, st.title,
+                     st.status, st.created_at, st.updated_at
+              from support_tickets st
+              join users u on u.id = st.user_id
+              order by st.created_at desc
+              limit ? offset ?
+              """
+            : """
+              select st.id, st.user_id, u.name as user_name, st.lobby_id, st.category, st.title,
+                     st.status, st.created_at, st.updated_at
+              from support_tickets st
+              join users u on u.id = st.user_id
+              where st.status = ?
+              order by st.created_at desc
+              limit ? offset ?
+              """;
+        Object[] args = !filtered
+            ? new Object[] {safeSize, (safePage - 1) * safeSize}
+            : new Object[] {normalizedStatus, safeSize, (safePage - 1) * safeSize};
+        List<AdminController.SupportTicketSummaryResponse> items = jdbcTemplate.query(sql, (rs, rowNum) -> new AdminController.SupportTicketSummaryResponse(
+            rs.getLong("id"),
+            rs.getLong("user_id"),
+            rs.getString("user_name"),
+            nullableLong(rs, "lobby_id"),
+            rs.getString("category"),
+            rs.getString("title"),
+            rs.getString("status"),
+            stringOrNull(rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toInstant()),
+            stringOrNull(rs.getTimestamp("updated_at") == null ? null : rs.getTimestamp("updated_at").toInstant())
+        ), args);
+        Long totalCount = !filtered
+            ? jdbcTemplate.queryForObject("select count(*) from support_tickets", Long.class)
+            : jdbcTemplate.queryForObject("select count(*) from support_tickets where status = ?", Long.class, normalizedStatus);
+        return new AdminController.SupportTicketPageResponse(items, safePage, safeSize, nullToZero(totalCount));
+    }
+
+    @Transactional
+    public AdminController.SupportTicketDetailResponse supportTicket(AuthenticatedUser admin, Long ticketId) {
+        AdminController.SupportTicketDetailResponse ticket = jdbcTemplate.query(
+            """
+            select st.id, st.user_id, requester.name as user_name, st.lobby_id, st.category, st.title,
+                   st.body, st.status, st.resolution_note, st.resolved_by_admin_id,
+                   resolver.name as resolved_by_admin_name, st.resolved_at, st.created_at, st.updated_at
+            from support_tickets st
+            join users requester on requester.id = st.user_id
+            left join users resolver on resolver.id = st.resolved_by_admin_id
+            where st.id = ?
+            """,
+            rs -> {
+                if (!rs.next()) {
+                    throw notFound("Support ticket not found.");
+                }
+                Long resolverId = nullableLong(rs, "resolved_by_admin_id");
+                return new AdminController.SupportTicketDetailResponse(
+                    rs.getLong("id"),
+                    new AdminController.UserReference(rs.getLong("user_id"), rs.getString("user_name")),
+                    nullableLong(rs, "lobby_id"),
+                    rs.getString("category"),
+                    rs.getString("title"),
+                    rs.getString("body"),
+                    rs.getString("status"),
+                    rs.getString("resolution_note"),
+                    resolverId == null ? null : new AdminController.UserReference(resolverId, rs.getString("resolved_by_admin_name")),
+                    stringOrNull(rs.getTimestamp("resolved_at") == null ? null : rs.getTimestamp("resolved_at").toInstant()),
+                    stringOrNull(rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toInstant()),
+                    stringOrNull(rs.getTimestamp("updated_at") == null ? null : rs.getTimestamp("updated_at").toInstant())
+                );
+            },
+            ticketId
+        );
+        audit(admin.id(), "VIEW_SUPPORT_TICKET", "SUPPORT_TICKET", ticketId, null);
+        return ticket;
+    }
+
+    @Transactional
+    public void updateSupportTicket(AuthenticatedUser admin, Long ticketId, AdminController.UpdateSupportTicketRequest request) {
+        User adminUser = userOrNotFound(admin.id());
+        String status = parseSupportTicketStatus(request.status());
+        String resolutionNote = nullableTrimmed(request.resolutionNote());
+        if (status.equals("RESOLVED") && resolutionNote == null) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "Resolution note is required when resolving a support ticket.");
+        }
+        if (!existsById("support_tickets", ticketId)) {
+            throw notFound("Support ticket not found.");
+        }
+        if (status.equals("RESOLVED")) {
+            jdbcTemplate.update(
+                """
+                update support_tickets
+                set status = ?, resolution_note = ?, resolved_by_admin_id = ?, resolved_at = now(), updated_at = now()
+                where id = ?
+                """,
+                status,
+                resolutionNote,
+                adminUser.getId(),
+                ticketId
+            );
+        } else {
+            jdbcTemplate.update(
+                """
+                update support_tickets
+                set status = ?, resolution_note = ?, resolved_by_admin_id = null, resolved_at = null, updated_at = now()
+                where id = ?
+                """,
+                status,
+                resolutionNote,
+                ticketId
+            );
+        }
+        auditLogRepository.save(new AdminAuditLog(adminUser, "UPDATE_SUPPORT_TICKET", "SUPPORT_TICKET", ticketId, "{\"status\":\"" + status + "\"}"));
     }
 
     @Transactional(readOnly = true)
@@ -407,6 +529,24 @@ public class AdminService {
         } catch (IllegalArgumentException exception) {
             throw new AuthException(HttpStatus.BAD_REQUEST, "Invalid user status.");
         }
+    }
+
+    private String parseSupportTicketStatus(String status) {
+        if (status == null) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "Invalid support ticket status.");
+        }
+        String normalized = status.trim().toUpperCase();
+        if (!List.of("OPEN", "IN_PROGRESS", "RESOLVED").contains(normalized)) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "Invalid support ticket status.");
+        }
+        return normalized;
+    }
+
+    private String nullableTrimmed(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private Instant parseOptionalInstant(String value) {
