@@ -71,10 +71,10 @@ class _SignupVerifyScreenState extends State<SignupVerifyScreen> {
     );
   }
 
-  void _goToLobbyList() {
+  void _goToLogin() {
     Navigator.pushNamedAndRemoveUntil(
       context,
-      AppRoutes.lobbyList,
+      AppRoutes.login,
       (route) => false,
     );
   }
@@ -98,11 +98,10 @@ class _SignupVerifyScreenState extends State<SignupVerifyScreen> {
           otp: _otpController.text.trim(),
         ),
       );
-      await AppServices.tokenStorage.saveAccessToken('mock-access-token');
       if (!mounted) {
         return;
       }
-      _goToLobbyList();
+      _goToLogin();
     } catch (error) {
       if (!mounted) {
         return;

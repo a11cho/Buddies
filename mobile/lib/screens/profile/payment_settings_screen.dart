@@ -9,7 +9,7 @@ import '../../widgets/loading_view.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/text_input_field.dart';
 
-// GET/PATCH /auth/me/payment-info에 대응하는 계좌 정보 설정 화면입니다.
+// GET/PATCH /users/me/payment-info에 대응하는 계좌 정보 설정 화면입니다.
 class PaymentSettingsScreen extends StatefulWidget {
   const PaymentSettingsScreen({super.key});
 

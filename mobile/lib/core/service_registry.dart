@@ -1,5 +1,8 @@
+import '../api/api_auth_service.dart';
+import '../api/api_user_service.dart';
 import '../mock/mock_services.dart';
 import '../services/services.dart';
+import 'api_client.dart';
 import 'mock_mode.dart';
 import 'token_storage.dart';
 
@@ -7,6 +10,11 @@ import 'token_storage.dart';
 // mock인지 실제 API인지 교체하는 일은 이 파일에서만 처리합니다.
 class AppServices {
   AppServices._();
+
+  static final TokenStorage tokenStorage = InMemoryTokenStorage();
+  static final ApiClient apiClient = ApiClientFactory.create(
+    tokenStorage: tokenStorage,
+  );
 
   static final AuthService authService = _buildAuthService();
   static final UserService userService = _buildUserService();
@@ -17,66 +25,65 @@ class AppServices {
   static final ReportService reportService = _buildReportService();
   static final RatingService ratingService = _buildRatingService();
   static final HelpService helpService = _buildHelpService();
-  static final TokenStorage tokenStorage = InMemoryTokenStorage();
 
   static AuthService _buildAuthService() {
-    if (useMockMode) {
+    if (useMockAuthService) {
       return MockAuthService();
     }
-    throw UnimplementedError('ApiAuthService is not implemented yet.');
+    return ApiAuthService(apiClient: apiClient);
   }
 
   static UserService _buildUserService() {
-    if (useMockMode) {
+    if (useMockUserService) {
       return MockUserService();
     }
-    throw UnimplementedError('ApiUserService is not implemented yet.');
+    return ApiUserService(apiClient: apiClient);
   }
 
   static LobbyService _buildLobbyService() {
-    if (useMockMode) {
+    if (useMockLobbyService) {
       return MockLobbyService();
     }
     throw UnimplementedError('ApiLobbyService is not implemented yet.');
   }
 
   static CartService _buildCartService() {
-    if (useMockMode) {
+    if (useMockCartService) {
       return MockCartService();
     }
     throw UnimplementedError('ApiCartService is not implemented yet.');
   }
 
   static PaymentService _buildPaymentService() {
-    if (useMockMode) {
+    if (useMockPaymentService) {
       return MockPaymentService();
     }
     throw UnimplementedError('ApiPaymentService is not implemented yet.');
   }
 
   static ChatService _buildChatService() {
-    if (useMockMode) {
+    if (useMockChatService) {
       return MockChatService();
     }
     throw UnimplementedError('ApiChatService is not implemented yet.');
   }
 
   static ReportService _buildReportService() {
-    if (useMockMode) {
+    if (useMockReportService) {
       return MockReportService();
     }
     throw UnimplementedError('ApiReportService is not implemented yet.');
   }
 
   static RatingService _buildRatingService() {
-    if (useMockMode) {
+    if (useMockRatingService) {
       return MockRatingService();
     }
     throw UnimplementedError('ApiRatingService is not implemented yet.');
   }
 
   static HelpService _buildHelpService() {
-    if (useMockMode) {
+    if (useMockHelpService) {
       return MockHelpService();
     }
     throw UnimplementedError('ApiHelpService is not implemented yet.');
