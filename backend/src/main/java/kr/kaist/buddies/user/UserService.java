@@ -11,6 +11,8 @@ import kr.kaist.buddies.user.UserController.FaqResponse;
 import kr.kaist.buddies.user.UserController.MessageResponse;
 import kr.kaist.buddies.user.UserController.OrderHistoryItem;
 import kr.kaist.buddies.user.UserController.OrderHistoryResponse;
+import kr.kaist.buddies.user.UserController.ProfileImageUploadUrlRequest;
+import kr.kaist.buddies.user.UserController.ProfileImageUploadUrlResponse;
 import kr.kaist.buddies.user.UserController.ProfileResponse;
 import kr.kaist.buddies.user.UserController.RatingRequest;
 import kr.kaist.buddies.user.UserController.SupportTicketRequest;
@@ -56,6 +58,17 @@ public class UserService {
         requireActive(user);
         user.updateProfile(name.trim(), profileImageUrl);
         return toProfileResponse(user);
+    }
+
+    @Transactional(readOnly = true)
+    public ProfileImageUploadUrlResponse issueProfileImageUploadUrl(Long userId, ProfileImageUploadUrlRequest request) {
+        requireActive(findUser(userId));
+        String extension = requireSupportedImageType(request.contentType());
+        String safeFilename = request.filename().replaceAll("[^A-Za-z0-9._-]", "_");
+        return new ProfileImageUploadUrlResponse(
+            "https://storage.example.com/profile/" + userId + "/" + safeFilename,
+            "https://cdn.example.com/profile/" + userId + extension
+        );
     }
 
     @Transactional(readOnly = true)
@@ -235,6 +248,16 @@ public class UserService {
 
     private boolean validProfileImageUrl(String profileImageUrl) {
         return profileImageUrl == null || profileImageUrl.length() <= MAX_PROFILE_IMAGE_URL_LENGTH;
+    }
+
+    private String requireSupportedImageType(String contentType) {
+        return switch (contentType) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/gif" -> ".gif";
+            case "image/webp" -> ".webp";
+            default -> throw new AuthException(HttpStatus.BAD_REQUEST, "지원하지 않는 이미지 형식입니다.");
+        };
     }
 
     private String stringValue(Object value) {

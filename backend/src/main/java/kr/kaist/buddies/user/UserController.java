@@ -36,6 +36,14 @@ public class UserController {
         return userService.updateProfile(user.id(), request);
     }
 
+    @PostMapping("/users/me/profile-image/upload-url")
+    public ProfileImageUploadUrlResponse profileImageUploadUrl(
+        @CurrentUser AuthenticatedUser user,
+        @Valid @RequestBody ProfileImageUploadUrlRequest request
+    ) {
+        return userService.issueProfileImageUploadUrl(user.id(), request);
+    }
+
     @GetMapping("/users/me/order-history")
     public OrderHistoryResponse orderHistory(@CurrentUser AuthenticatedUser user) {
         return userService.orderHistory(user.id());
@@ -59,6 +67,8 @@ public class UserController {
     }
 
     public record UpdateProfileRequest(@NotBlank String name, String profileImageUrl) {}
+    public record ProfileImageUploadUrlRequest(@NotBlank String filename, @NotBlank String contentType) {}
+    public record ProfileImageUploadUrlResponse(String uploadUrl, String mediaUrl) {}
     public record RatingRequest(Long lobbyId, Long targetUserId, @Min(1) @Max(5) int rating, String feedback) {}
     public record SupportTicketRequest(@NotBlank String category, @NotBlank String title, @NotBlank String body, Long lobbyId) {}
     public record ProfileResponse(Long id, String email, String name, String role, String profileImageUrl, double trustScore, String status) {}

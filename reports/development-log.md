@@ -1184,3 +1184,43 @@
 - 실제 DB migration 적용 후 support ticket 목록/상세/상태 갱신 end-to-end 확인
 - 실제 ADMIN 계정 JWT로 Admin Web Tickets 탭에서 문의 처리 흐름 확인
 - 사용자 앱에서 처리 완료된 문의 상태 또는 답변을 사용자에게 다시 보여줄지 정책 결정
+### 프로필 이미지 업로드 URL 발급 API 추가
+
+#### 목적
+
+채팅 이미지 업로드와 같은 흐름을 프로필 이미지에도 적용하기 위해, 사용자가 직접 이미지 URL을 입력하지 않고 Flutter에서 사진첩 이미지를 선택한 뒤 업로드 URL을 발급받아 업로드하고, 최종 `mediaUrl`만 `PATCH /users/me`의 `profileImageUrl`로 저장할 수 있도록 백엔드 API와 SDD를 보강했다.
+
+#### 주요 변경 사항
+
+- User API에 `POST /users/me/profile-image/upload-url` 추가
+  - 요청 body는 `filename`, `contentType`
+  - 응답 body는 `uploadUrl`, `mediaUrl`
+  - JWT 현재 사용자를 조회하고 `ACTIVE` 상태인지 확인
+  - 지원 이미지 형식은 `image/jpeg`, `image/png`, `image/gif`, `image/webp`
+  - 현재 구현은 채팅 이미지 업로드 URL과 같은 더미 URL 발급 구조이며, 실제 object storage presigned URL 발급은 추후 storage provider 연동 시 교체 예정
+
+- 프로필 수정 흐름 정리
+  - 이미지 바이너리는 `PATCH /users/me`로 보내지 않음
+  - 클라이언트가 업로드 완료 후 받은 `mediaUrl`을 `profileImageUrl`로 전달
+  - `users.profile_image_url`에는 이미지 파일이 아니라 URL만 저장
+
+- SDD 업데이트
+  - `buddies-doc/SDD/2_프로필&이력&평가&도움말.md`에 프로필 이미지 업로드 URL 발급 정책, Flutter 연결 흐름, API 스펙, 시퀀스 반영
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/user/UserController.java`
+- `backend/src/main/java/kr/kaist/buddies/user/UserService.java`
+- `buddies-doc/SDD/2_프로필&이력&평가&도움말.md`
+- `reports/development-log.md`
+
+#### 검증
+
+- `rg`로 새 endpoint, DTO, 서비스 메서드, 문서 반영 위치를 확인했다.
+- `git diff --check` 성공
+- 현재 환경에는 `mvn` 명령이 없어 Maven build/test는 수행하지 못했다.
+
+#### 남은 작업
+
+- 실제 storage provider를 선택한 뒤 `uploadUrl`을 presigned URL로 교체
+- 업로드 객체 key 정책, 캐시 무효화 정책, 기존 프로필 이미지 삭제 정책 확정
