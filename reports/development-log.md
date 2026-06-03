@@ -1035,8 +1035,8 @@
 #### 주요 변경 사항
 
 - Auth 계좌 정보 API 추가
-  - `GET /auth/me/payment-info` 추가
-  - `PATCH /auth/me/payment-info` 추가
+  - `GET /users/me/payment-info` 추가
+  - `PATCH /users/me/payment-info` 추가
   - 계좌 정보는 JWT의 현재 사용자 ID를 기준으로만 조회/수정
   - 은행명, 계좌번호, 예금주명 필수값 검증 추가
   - 계좌번호는 숫자, 공백, 하이픈으로 구성된 최소 형식만 허용
@@ -1064,7 +1064,7 @@
 
 - 로컬 테스트 도구 보강
   - `buddies-doc/tools/signup-test-app`에 계좌 정보 등록/조회 카드 추가
-  - 로그인 후 발급받은 JWT로 `PATCH /auth/me/payment-info`, `GET /auth/me/payment-info`를 직접 호출 가능
+  - 로그인 후 발급받은 JWT로 `PATCH /users/me/payment-info`, `GET /users/me/payment-info`를 직접 호출 가능
   - 테스트 도구 제목을 회원가입/로그인/비밀번호 재설정/계좌 등록 흐름을 포함하도록 수정
 
 #### 수정 파일
@@ -1138,3 +1138,260 @@
 
 - 실제 storage provider를 선택한 뒤 `uploadUrl`을 presigned URL로 교체
 - 업로드 객체 key 정책, 캐시 무효화 정책, 기존 프로필 이미지 삭제 정책 확정
+### Direct Contact 지원 문의 관리자 처리 기능 추가 및 SDD 반영
+
+#### 목적
+
+기존 사용자 API `POST /support/tickets`로 FAQ에서 해결되지 않은 문의를 생성할 수 있었지만, Admin Web에는 해당 문의를 조회하고 처리할 수 있는 화면과 Admin API가 없어 운영 대응이 불가능했다. 이에 support ticket 관리자 목록/상세/상태 갱신 API와 Admin Web Tickets 화면을 추가하고, 관련 SDD 문서를 최신 구현에 맞게 갱신했다.
+
+#### 주요 변경 사항
+
+- Admin 지원 문의 API 추가
+  - `GET /admin/support-tickets?status=OPEN&page=1&size=20` 추가
+  - `GET /admin/support-tickets/{ticketId}` 추가
+  - `PATCH /admin/support-tickets/{ticketId}` 추가
+  - `OPEN`, `IN_PROGRESS`, `RESOLVED` 상태 필터와 pagination 적용
+  - 문의 상세 조회 시 제출 사용자, 관련 lobby ID, category, title, body, status, 처리 메모, 처리 Admin, 처리 시각 반환
+  - `RESOLVED`로 변경할 때 `resolutionNote`를 필수로 검증
+  - 상세 조회와 상태 갱신 시 `admin_audit_logs`에 `VIEW_SUPPORT_TICKET`, `UPDATE_SUPPORT_TICKET` 기록
+
+- support_tickets 처리 컬럼 및 인덱스 추가
+  - Flyway migration `V7__support_ticket_admin_resolution.sql` 추가
+  - `support_tickets.resolution_note` 추가
+  - `support_tickets.resolved_by_admin_id` 추가
+  - `support_tickets.resolved_at` 추가
+  - Admin 목록 필터링을 위한 `idx_support_tickets_status_created_at` 인덱스 추가
+
+- Admin overview 통계 보강
+  - `/admin/system/overview` 응답에 `openSupportTicketCount` 추가
+  - `OPEN`, `IN_PROGRESS` 상태 문의를 미처리 문의로 집계
+  - Admin Web Overview에 `Open Tickets` metric 표시
+
+- Admin Web Tickets 화면 추가
+  - sidebar에 `Tickets` 탭 추가
+  - 문의 상태 필터 `OPEN`, `IN_PROGRESS`, `RESOLVED` 추가
+  - 문의 목록과 선택된 문의 상세 패널 추가
+  - 상세 패널에 제출 사용자, 관련 lobby ID, category, title, body, 처리 Admin 표시
+  - 처리 상태와 처리 메모를 입력해 문의 상태를 갱신하는 폼 추가
+  - 처리 성공 후 문의 목록과 overview 통계 재조회
+
+- Admin Web API client 확장
+  - `SupportTicketPage`, `SupportTicketSummary`, `SupportTicketDetail` TypeScript 타입 추가
+  - `getSupportTickets()`, `getSupportTicket()`, `updateSupportTicket()` 추가
+
+- SDD 문서 갱신
+  - `6_관리자_사용자조정&계정관리&모니터링.md`에 Direct Contact 지원 문의 처리 시스템, API, DB, 감사 로그, 시퀀스 추가
+  - `7_API_목록_정리.md`에 Admin support ticket API 3개 추가
+  - `8_DB_목록_정리.md`와 `2_프로필&이력&평가&도움말.md`의 `support_tickets` 컬럼 설명 갱신
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminController.java`
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminService.java`
+- `backend/src/main/resources/db/migration/V7__support_ticket_admin_resolution.sql`
+- `admin-web/src/apiClient.ts`
+- `admin-web/src/main.tsx`
+- `admin-web/src/styles.css`
+- `buddies-doc/SDD/2_프로필&이력&평가&도움말.md`
+- `buddies-doc/SDD/6_관리자_사용자조정&계정관리&모니터링.md`
+- `buddies-doc/SDD/7_API_목록_정리.md`
+- `buddies-doc/SDD/8_DB_목록_정리.md`
+- `reports/development-log.md`
+
+#### SRS/SDD 충족 확인
+
+- Direct Contact 문의 운영 대응
+  - 사용자가 생성한 `support_tickets`를 Admin이 조회하고 상태를 갱신할 수 있도록 Admin API와 화면을 연결
+  - 문의를 삭제하지 않고 처리 메모, 처리자, 처리 시각을 보관
+
+- Admin 시스템 모니터링
+  - Admin overview에서 미처리 support ticket 수를 확인할 수 있도록 `openSupportTicketCount` 추가
+
+- Admin 감사 로그
+  - 지원 문의 상세 조회와 상태 갱신 작업을 `admin_audit_logs`에 기록
+
+#### 검증
+
+- `admin-web`에서 `npm.cmd install` 실행 후 dependency 설치 성공
+- `admin-web`에서 `npm.cmd run build` 성공
+- 최초 `npm run build`는 PowerShell 실행 정책과 Vite/esbuild sandbox 읽기 제한으로 실패했으나, `npm.cmd`와 승인된 빌드 실행으로 검증 완료
+- 현재 환경에는 `mvnw`와 `mvn` 명령이 없어 Maven build/test는 수행하지 못했다.
+- `rg`로 Admin support ticket API, `openSupportTicketCount`, `resolution_note`, SDD support ticket 문서 반영 위치를 확인했다.
+
+#### 남은 작업
+
+- Maven wrapper 추가 또는 Maven 설치 후 backend compile/test 실행
+- 실제 DB migration 적용 후 support ticket 목록/상세/상태 갱신 end-to-end 확인
+- 실제 ADMIN 계정 JWT로 Admin Web Tickets 탭에서 문의 처리 흐름 확인
+- 사용자 앱에서 처리 완료된 문의 상태 또는 답변을 사용자에게 다시 보여줄지 정책 결정
+
+## 2026-06-03
+
+### Payment Info API User 모듈 이동
+
+#### 목적
+
+Host 계좌 정보 등록/수정/조회 API의 책임을 Auth 모듈에서 User 모듈로 이동해, 인증/토큰 발급은 Auth가 담당하고 로그인한 사용자의 프로필성 정보 관리는 User가 담당하도록 경계를 정리했다.
+
+#### 주요 변경 사항
+
+- 계좌 정보 API 경로를 `/auth/me/payment-info`에서 `/users/me/payment-info`로 변경
+  - `GET /users/me/payment-info`
+  - `PATCH /users/me/payment-info`
+- `AuthController`와 `AuthService`에서 payment info API/서비스 책임 제거
+- `UserController`와 `UserService`가 현재 사용자 JWT 문맥으로 `host_payment_infos`를 조회/저장하도록 정리
+- `HostPaymentInfo`와 `HostPaymentInfoRepository`를 `kr.kaist.buddies.user.domain` 패키지로 배치
+- `SecurityConfig`에서 `/users/me/**` 인증 보호 범위 안에 payment info API가 포함되도록 확인
+- `LobbyService`의 로비 생성 및 cart lock 전 Host 계좌 정보 등록 여부 검사는 유지
+- 로비 상세 응답에서 LOCKED 이후 active member에게 Host 계좌 정보를 제한 노출하는 정책은 유지
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthController.java`
+- `backend/src/main/java/kr/kaist/buddies/auth/AuthService.java`
+- `backend/src/main/java/kr/kaist/buddies/config/SecurityConfig.java`
+- `backend/src/main/java/kr/kaist/buddies/lobby/LobbyService.java`
+- `backend/src/main/java/kr/kaist/buddies/user/UserController.java`
+- `backend/src/main/java/kr/kaist/buddies/user/UserService.java`
+- `backend/src/main/java/kr/kaist/buddies/user/domain/HostPaymentInfo.java`
+- `backend/src/main/java/kr/kaist/buddies/user/domain/HostPaymentInfoRepository.java`
+- `buddies-doc/SDD/2_프로필&이력&평가&도움말.md`
+- `reports/development-log.md`
+
+#### 검토 및 보정
+
+- `HostPaymentInfo`의 package 선언이 파일 경로와 달라 컴파일 시 import/entity scan 문제가 발생할 수 있어 `kr.kaist.buddies.user.domain`으로 수정했다.
+- `UserService` 생성자에 `HostPaymentInfoRepository` 주입 파라미터가 빠져 있어 컴파일 오류가 발생할 수 있어 생성자 주입을 보정했다.
+- 모바일 프로필 계좌 설정 화면과 user service 주석의 API 경로를 `/users/me/payment-info`로 정정했다.
+- SDD 문서의 남은 `/auth/me/payment-info` 참조를 `/users/me/payment-info`로 정리했다.
+
+#### 검증
+
+- `rg`로 `/auth/me/payment-info`, `/users/me/payment-info`, `HostPaymentInfo` 참조 위치를 확인했다.
+- backend Maven 테스트/컴파일을 실행해 Spring component scan과 생성자 주입 오류 여부를 확인했다.
+### 프로필 이미지 업로드 URL 발급 API 추가
+
+#### 목적
+
+채팅 이미지 업로드와 같은 흐름을 프로필 이미지에도 적용하기 위해, 사용자가 직접 이미지 URL을 입력하지 않고 Flutter에서 사진첩 이미지를 선택한 뒤 업로드 URL을 발급받아 업로드하고, 최종 `mediaUrl`만 `PATCH /users/me`의 `profileImageUrl`로 저장할 수 있도록 백엔드 API와 SDD를 보강했다.
+
+#### 주요 변경 사항
+
+- User API에 `POST /users/me/profile-image/upload-url` 추가
+  - 요청 body는 `filename`, `contentType`
+  - 응답 body는 `uploadUrl`, `mediaUrl`
+  - JWT 현재 사용자를 조회하고 `ACTIVE` 상태인지 확인
+  - 지원 이미지 형식은 `image/jpeg`, `image/png`, `image/gif`, `image/webp`
+  - 현재 구현은 채팅 이미지 업로드 URL과 같은 더미 URL 발급 구조이며, 실제 object storage presigned URL 발급은 추후 storage provider 연동 시 교체 예정
+
+- 프로필 수정 흐름 정리
+  - 이미지 바이너리는 `PATCH /users/me`로 보내지 않음
+  - 클라이언트가 업로드 완료 후 받은 `mediaUrl`을 `profileImageUrl`로 전달
+  - `users.profile_image_url`에는 이미지 파일이 아니라 URL만 저장
+
+- SDD 업데이트
+  - `buddies-doc/SDD/2_프로필&이력&평가&도움말.md`에 프로필 이미지 업로드 URL 발급 정책, Flutter 연결 흐름, API 스펙, 시퀀스 반영
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/user/UserController.java`
+- `backend/src/main/java/kr/kaist/buddies/user/UserService.java`
+- `buddies-doc/SDD/2_프로필&이력&평가&도움말.md`
+- `reports/development-log.md`
+
+#### 검증
+
+- `rg`로 새 endpoint, DTO, 서비스 메서드, 문서 반영 위치를 확인했다.
+- `git diff --check` 성공
+- 현재 환경에는 `mvn` 명령이 없어 Maven build/test는 수행하지 못했다.
+
+#### 남은 작업
+
+- 실제 storage provider를 선택한 뒤 `uploadUrl`을 presigned URL로 교체
+- 업로드 객체 key 정책, 캐시 무효화 정책, 기존 프로필 이미지 삭제 정책 확정
+### Direct Contact 지원 문의 관리자 처리 기능 추가 및 SDD 반영
+
+#### 목적
+
+기존 사용자 API `POST /support/tickets`로 FAQ에서 해결되지 않은 문의를 생성할 수 있었지만, Admin Web에는 해당 문의를 조회하고 처리할 수 있는 화면과 Admin API가 없어 운영 대응이 불가능했다. 이에 support ticket 관리자 목록/상세/상태 갱신 API와 Admin Web Tickets 화면을 추가하고, 관련 SDD 문서를 최신 구현에 맞게 갱신했다.
+
+#### 주요 변경 사항
+
+- Admin 지원 문의 API 추가
+  - `GET /admin/support-tickets?status=OPEN&page=1&size=20` 추가
+  - `GET /admin/support-tickets/{ticketId}` 추가
+  - `PATCH /admin/support-tickets/{ticketId}` 추가
+  - `OPEN`, `IN_PROGRESS`, `RESOLVED` 상태 필터와 pagination 적용
+  - 문의 상세 조회 시 제출 사용자, 관련 lobby ID, category, title, body, status, 처리 메모, 처리 Admin, 처리 시각 반환
+  - `RESOLVED`로 변경할 때 `resolutionNote`를 필수로 검증
+  - 상세 조회와 상태 갱신 시 `admin_audit_logs`에 `VIEW_SUPPORT_TICKET`, `UPDATE_SUPPORT_TICKET` 기록
+
+- support_tickets 처리 컬럼 및 인덱스 추가
+  - Flyway migration `V7__support_ticket_admin_resolution.sql` 추가
+  - `support_tickets.resolution_note` 추가
+  - `support_tickets.resolved_by_admin_id` 추가
+  - `support_tickets.resolved_at` 추가
+  - Admin 목록 필터링을 위한 `idx_support_tickets_status_created_at` 인덱스 추가
+
+- Admin overview 통계 보강
+  - `/admin/system/overview` 응답에 `openSupportTicketCount` 추가
+  - `OPEN`, `IN_PROGRESS` 상태 문의를 미처리 문의로 집계
+  - Admin Web Overview에 `Open Tickets` metric 표시
+
+- Admin Web Tickets 화면 추가
+  - sidebar에 `Tickets` 탭 추가
+  - 문의 상태 필터 `OPEN`, `IN_PROGRESS`, `RESOLVED` 추가
+  - 문의 목록과 선택된 문의 상세 패널 추가
+  - 상세 패널에 제출 사용자, 관련 lobby ID, category, title, body, 처리 Admin 표시
+  - 처리 상태와 처리 메모를 입력해 문의 상태를 갱신하는 폼 추가
+  - 처리 성공 후 문의 목록과 overview 통계 재조회
+
+- Admin Web API client 확장
+  - `SupportTicketPage`, `SupportTicketSummary`, `SupportTicketDetail` TypeScript 타입 추가
+  - `getSupportTickets()`, `getSupportTicket()`, `updateSupportTicket()` 추가
+
+- SDD 문서 갱신
+  - `6_관리자_사용자조정&계정관리&모니터링.md`에 Direct Contact 지원 문의 처리 시스템, API, DB, 감사 로그, 시퀀스 추가
+  - `7_API_목록_정리.md`에 Admin support ticket API 3개 추가
+  - `8_DB_목록_정리.md`와 `2_프로필&이력&평가&도움말.md`의 `support_tickets` 컬럼 설명 갱신
+
+#### 수정 파일
+
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminController.java`
+- `backend/src/main/java/kr/kaist/buddies/admin/AdminService.java`
+- `backend/src/main/resources/db/migration/V7__support_ticket_admin_resolution.sql`
+- `admin-web/src/apiClient.ts`
+- `admin-web/src/main.tsx`
+- `admin-web/src/styles.css`
+- `buddies-doc/SDD/2_프로필&이력&평가&도움말.md`
+- `buddies-doc/SDD/6_관리자_사용자조정&계정관리&모니터링.md`
+- `buddies-doc/SDD/7_API_목록_정리.md`
+- `buddies-doc/SDD/8_DB_목록_정리.md`
+- `reports/development-log.md`
+
+#### SRS/SDD 충족 확인
+
+- Direct Contact 문의 운영 대응
+  - 사용자가 생성한 `support_tickets`를 Admin이 조회하고 상태를 갱신할 수 있도록 Admin API와 화면을 연결
+  - 문의를 삭제하지 않고 처리 메모, 처리자, 처리 시각을 보관
+
+- Admin 시스템 모니터링
+  - Admin overview에서 미처리 support ticket 수를 확인할 수 있도록 `openSupportTicketCount` 추가
+
+- Admin 감사 로그
+  - 지원 문의 상세 조회와 상태 갱신 작업을 `admin_audit_logs`에 기록
+
+#### 검증
+
+- `admin-web`에서 `npm.cmd install` 실행 후 dependency 설치 성공
+- `admin-web`에서 `npm.cmd run build` 성공
+- 최초 `npm run build`는 PowerShell 실행 정책과 Vite/esbuild sandbox 읽기 제한으로 실패했으나, `npm.cmd`와 승인된 빌드 실행으로 검증 완료
+- 현재 환경에는 `mvnw`와 `mvn` 명령이 없어 Maven build/test는 수행하지 못했다.
+- `rg`로 Admin support ticket API, `openSupportTicketCount`, `resolution_note`, SDD support ticket 문서 반영 위치를 확인했다.
+
+#### 남은 작업
+
+- Maven wrapper 추가 또는 Maven 설치 후 backend compile/test 실행
+- 실제 DB migration 적용 후 support ticket 목록/상세/상태 갱신 end-to-end 확인
+- 실제 ADMIN 계정 JWT로 Admin Web Tickets 탭에서 문의 처리 흐름 확인
+- 사용자 앱에서 처리 완료된 문의 상태 또는 답변을 사용자에게 다시 보여줄지 정책 결정

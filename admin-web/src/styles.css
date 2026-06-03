@@ -376,6 +376,25 @@ dd {
   margin: 0 0 12px;
 }
 
+.ticket-body {
+  background: #f8fafc;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+  margin-bottom: 18px;
+  padding: 14px;
+}
+
+.ticket-body h3 {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+.ticket-body p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .messages {
   display: grid;
   gap: 10px;
@@ -456,7 +475,7 @@ th {
   }
 
   .sidebar nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   }
 
   .content {

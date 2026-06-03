@@ -61,7 +61,7 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health", "/ws/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/auth/signup/**", "/auth/login", "/auth/password-reset/**").permitAll()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
-                .requestMatchers("/auth/me", "/auth/me/**", "/auth/refresh", "/auth/logout").authenticated()
+                .requestMatchers("/auth/me", "/auth/refresh", "/auth/logout").authenticated()
                 .requestMatchers("/users/me", "/users/me/**", "/ratings", "/help/faqs", "/support/tickets").authenticated()
                 .requestMatchers("/lobbies/**", "/reports").authenticated()
                 .anyRequest().permitAll()

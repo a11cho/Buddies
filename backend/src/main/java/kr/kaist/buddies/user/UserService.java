@@ -11,11 +11,14 @@ import kr.kaist.buddies.user.UserController.FaqResponse;
 import kr.kaist.buddies.user.UserController.MessageResponse;
 import kr.kaist.buddies.user.UserController.OrderHistoryItem;
 import kr.kaist.buddies.user.UserController.OrderHistoryResponse;
+import kr.kaist.buddies.user.UserController.PaymentInfoResponse;
 import kr.kaist.buddies.user.UserController.ProfileImageUploadUrlRequest;
 import kr.kaist.buddies.user.UserController.ProfileImageUploadUrlResponse;
 import kr.kaist.buddies.user.UserController.ProfileResponse;
 import kr.kaist.buddies.user.UserController.RatingRequest;
 import kr.kaist.buddies.user.UserController.SupportTicketRequest;
+import kr.kaist.buddies.user.domain.HostPaymentInfo;
+import kr.kaist.buddies.user.domain.HostPaymentInfoRepository;
 import kr.kaist.buddies.user.domain.User;
 import kr.kaist.buddies.user.domain.UserRepository;
 import kr.kaist.buddies.user.domain.UserStatus;
@@ -28,14 +31,22 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class UserService {
     private static final String NAME_PATTERN = "[A-Za-z0-9가-힣 ]+";
+    private static final String ACCOUNT_NUMBER_PATTERN = "[0-9 -]+";
     private static final int MAX_NAME_LENGTH = 100;
     private static final int MAX_PROFILE_IMAGE_URL_LENGTH = 500;
+    private static final int MAX_PAYMENT_INFO_LENGTH = 100;
 
     private final UserRepository userRepository;
+    private final HostPaymentInfoRepository hostPaymentInfoRepository;
     private final JdbcTemplate jdbcTemplate;
 
-    public UserService(UserRepository userRepository, JdbcTemplate jdbcTemplate) {
+    public UserService(
+        UserRepository userRepository,
+        HostPaymentInfoRepository hostPaymentInfoRepository,
+        JdbcTemplate jdbcTemplate
+    ) {
         this.userRepository = userRepository;
+        this.hostPaymentInfoRepository = hostPaymentInfoRepository;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -58,6 +69,30 @@ public class UserService {
         requireActive(user);
         user.updateProfile(name.trim(), profileImageUrl);
         return toProfileResponse(user);
+    }
+
+    @Transactional(readOnly = true)
+    public PaymentInfoResponse paymentInfo(Long userId) {
+        HostPaymentInfo paymentInfo = hostPaymentInfoRepository.findByUser_Id(userId)
+            .orElseThrow(() -> new AuthException(HttpStatus.NOT_FOUND, "계좌 정보가 아직 등록되지 않았습니다."));
+        return toPaymentInfoResponse(paymentInfo);
+    }
+
+    @Transactional
+    public PaymentInfoResponse updatePaymentInfo(Long userId, String bankName, String accountNumber, String accountHolderName) {
+        String normalizedBankName = requiredPaymentField(bankName);
+        String normalizedAccountNumber = requiredPaymentField(accountNumber);
+        String normalizedAccountHolderName = requiredPaymentField(accountHolderName);
+        if (!validAccountNumber(normalizedAccountNumber)) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "계좌번호 형식이 올바르지 않습니다.");
+        }
+
+        User user = findUser(userId);
+        requireActive(user);
+        HostPaymentInfo paymentInfo = hostPaymentInfoRepository.findByUser_Id(userId)
+            .orElseGet(() -> new HostPaymentInfo(user, normalizedBankName, normalizedAccountNumber, normalizedAccountHolderName));
+        paymentInfo.update(normalizedBankName, normalizedAccountNumber, normalizedAccountHolderName);
+        return toPaymentInfoResponse(hostPaymentInfoRepository.save(paymentInfo));
     }
 
     @Transactional(readOnly = true)
@@ -209,6 +244,15 @@ public class UserService {
         );
     }
 
+    private PaymentInfoResponse toPaymentInfoResponse(HostPaymentInfo paymentInfo) {
+        return new PaymentInfoResponse(
+            paymentInfo.getBankName(),
+            paymentInfo.getAccountNumber(),
+            paymentInfo.getAccountHolderName(),
+            paymentInfo.getUpdatedAt() == null ? null : paymentInfo.getUpdatedAt().toString()
+        );
+    }
+
     private void requireActive(User user) {
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new AuthException(HttpStatus.FORBIDDEN, "접근 권한이 없습니다.");
@@ -248,6 +292,21 @@ public class UserService {
 
     private boolean validProfileImageUrl(String profileImageUrl) {
         return profileImageUrl == null || profileImageUrl.length() <= MAX_PROFILE_IMAGE_URL_LENGTH;
+    }
+
+    private String requiredPaymentField(String value) {
+        if (value == null) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다.");
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty() || trimmed.length() > MAX_PAYMENT_INFO_LENGTH) {
+            throw new AuthException(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다.");
+        }
+        return trimmed;
+    }
+
+    private boolean validAccountNumber(String accountNumber) {
+        return accountNumber.length() >= 4 && accountNumber.length() <= MAX_PAYMENT_INFO_LENGTH && accountNumber.matches(ACCOUNT_NUMBER_PATTERN);
     }
 
     private String requireSupportedImageType(String contentType) {

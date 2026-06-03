@@ -1,4 +1,4 @@
-package kr.kaist.buddies.auth.domain;
+package kr.kaist.buddies.user.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,7 +10,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
-import kr.kaist.buddies.user.domain.User;
 
 @Entity
 @Table(name = "host_payment_infos")
