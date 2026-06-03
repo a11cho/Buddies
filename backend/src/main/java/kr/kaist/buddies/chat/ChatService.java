@@ -1,9 +1,14 @@
 package kr.kaist.buddies.chat;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import kr.kaist.buddies.chat.ChatController.ChatHistoryResponse;
 import kr.kaist.buddies.chat.ChatController.ChatMessageRequest;
 import kr.kaist.buddies.chat.ChatController.ChatMessageResponse;
@@ -29,6 +34,7 @@ public class ChatService {
     private static final int DEFAULT_LIMIT = 50;
     private static final int MAX_LIMIT = 100;
     private static final int MAX_CONTENT_LENGTH = 500;
+    private static final TypeReference<Map<String, Object>> EVENT_METADATA_TYPE = new TypeReference<>() {};
     private static final List<String> RESTRICTED_KEYWORDS = List.of(
         "fuck",
         "shit",
@@ -45,6 +51,7 @@ public class ChatService {
     private final UserRepository userRepository;
     private final ChatReadService chatReadService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ObjectMapper objectMapper;
 
     public ChatService(
         ChatMessageRepository chatMessageRepository,
@@ -52,7 +59,8 @@ public class ChatService {
         LobbyMembershipRepository lobbyMembershipRepository,
         UserRepository userRepository,
         ChatReadService chatReadService,
-        ApplicationEventPublisher eventPublisher
+        ApplicationEventPublisher eventPublisher,
+        ObjectMapper objectMapper
     ) {
         this.chatMessageRepository = chatMessageRepository;
         this.lobbyRepository = lobbyRepository;
@@ -60,6 +68,7 @@ public class ChatService {
         this.userRepository = userRepository;
         this.chatReadService = chatReadService;
         this.eventPublisher = eventPublisher;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
@@ -102,6 +111,16 @@ public class ChatService {
 
     @Transactional
     public ChatMessageResponse publishSystemMessage(Long lobbyId, String eventType, Long targetUserId, String content) {
+        return publishSystemMessage(lobbyId, eventType, targetUserId, content, Map.of());
+    }
+
+    @Transactional
+    public ChatMessageResponse publishSystemMessage(Long lobbyId, String eventType, Long targetUserId, Map<String, Object> eventMetadata) {
+        return publishSystemMessage(lobbyId, eventType, targetUserId, null, eventMetadata);
+    }
+
+    @Transactional
+    public ChatMessageResponse publishSystemMessage(Long lobbyId, String eventType, Long targetUserId, String content, Map<String, Object> eventMetadata) {
         Lobby lobby = findLobby(lobbyId);
         ChatMessage message = chatMessageRepository.save(new ChatMessage(
             lobby,
@@ -111,6 +130,7 @@ public class ChatService {
             null,
             eventType,
             targetUserId,
+            serializeEventMetadata(eventMetadata),
             Instant.now()
         ));
         ChatMessageResponse response = toResponse(message);
@@ -265,7 +285,30 @@ public class ChatService {
             message.getTargetUserId(),
             message.getContent(),
             message.getMediaUrl(),
+            parseEventMetadata(message.getEventMetadataJson()),
             message.getCreatedAt().toString()
         );
+    }
+
+    private String serializeEventMetadata(Map<String, Object> eventMetadata) {
+        if (eventMetadata == null || eventMetadata.isEmpty()) {
+            return "{}";
+        }
+        try {
+            return objectMapper.writeValueAsString(eventMetadata);
+        } catch (JsonProcessingException exception) {
+            throw ChatErrorCode.STOMP_ERROR.exception(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private Map<String, Object> parseEventMetadata(String eventMetadataJson) {
+        if (eventMetadataJson == null || eventMetadataJson.isBlank()) {
+            return Collections.emptyMap();
+        }
+        try {
+            return objectMapper.readValue(eventMetadataJson, EVENT_METADATA_TYPE);
+        } catch (JsonProcessingException exception) {
+            return Collections.emptyMap();
+        }
     }
 }
