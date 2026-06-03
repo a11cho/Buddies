@@ -37,6 +37,12 @@ management:
         include: health,info
 
 buddies:
+  public-base-url: ${BUDDIES_PUBLIC_BASE_URL:https://localhost:8443}
+  storage:
+    gcs:
+      bucket-name: ${BUDDIES_GCS_BUCKET_NAME:}
+      public-base-url: ${BUDDIES_GCS_PUBLIC_BASE_URL:}
+      signed-url-expires-minutes: ${BUDDIES_GCS_SIGNED_URL_EXPIRES_MINUTES:15}
   jwt:
     secret: ${BUDDIES_JWT_SECRET:change-this-development-secret-change-this}
   cors:
