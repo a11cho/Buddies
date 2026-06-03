@@ -2,6 +2,7 @@ package kr.kaist.buddies.lobby;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import kr.kaist.buddies.chat.ChatArchiveService;
 import kr.kaist.buddies.chat.ChatReadService;
 import kr.kaist.buddies.lobby.LobbyController.CreateLobbyRequest;
@@ -10,9 +11,11 @@ import kr.kaist.buddies.lobby.LobbyController.KickMemberRequest;
 import kr.kaist.buddies.lobby.LobbyController.KickParticipantResponse;
 import kr.kaist.buddies.lobby.LobbyController.LobbyStatusResponse;
 import kr.kaist.buddies.lobby.LobbyController.LobbyMembershipResponse;
+import kr.kaist.buddies.lobby.LobbyController.LobbyMemberResponse;
 import kr.kaist.buddies.lobby.LobbyController.LobbyResponse;
 import kr.kaist.buddies.lobby.LobbyController.LobbySummaryResponse;
 import kr.kaist.buddies.lobby.LobbyController.LockCartResponse;
+import kr.kaist.buddies.lobby.LobbyController.MyLobbyResponse;
 import kr.kaist.buddies.lobby.LobbyController.TransferHostResponse;
 import kr.kaist.buddies.lobby.LobbyController.TransferHostRequest;
 import kr.kaist.buddies.lobby.LobbyController.UpdateLobbyStatusRequest;
@@ -67,11 +70,34 @@ public class LobbyService {
     }
 
     @Transactional(readOnly = true)
-    public List<LobbySummaryResponse> list(Long userId, String deliveryLocation, String restaurantName) {
-        DeliveryLocation location = parseDeliveryLocationOrNull(deliveryLocation);
+    public List<LobbySummaryResponse> list(Long userId, String deliveryZone, String restaurantName) {
+        DeliveryLocation location = parseDeliveryLocationOrNull(deliveryZone);
         String normalizedRestaurantName = normalizeSearchText(restaurantName);
         return searchAvailableLobbies(location, normalizedRestaurantName).stream()
             .map(lobby -> toSummaryResponse(lobby, userId))
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<LobbySummaryResponse> activeLobby(Long userId) {
+        return lobbyMembershipRepository.findActiveLobbyMembershipsForUser(userId).stream()
+            .findFirst()
+            .map(membership -> toSummaryResponse(membership.getLobby(), userId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<MyLobbyResponse> myLobbies(Long userId) {
+        return lobbyMembershipRepository.findByUserIdWithLobbyOrderByJoinedAtDesc(userId).stream()
+            .map(this::toMyLobbyResponse)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LobbyMemberResponse> members(Long userId, Long lobbyId) {
+        findLobby(lobbyId);
+        requireAnyMember(lobbyId, userId);
+        return lobbyMembershipRepository.findByLobbyIdWithUserOrderByJoinedAtAsc(lobbyId).stream()
+            .map(this::toMemberResponse)
             .toList();
     }
 
@@ -83,7 +109,7 @@ public class LobbyService {
             throw LobbyErrorCode.HOST_PAYMENT_INFO_REQUIRED.exception(HttpStatus.CONFLICT);
         }
 
-        DeliveryLocation location = parseDeliveryLocation(request.deliveryLocation());
+        DeliveryLocation location = parseDeliveryLocation(request.deliveryZone());
         Lobby lobby = lobbyRepository.save(new Lobby(
             host,
             request.restaurantName().trim(),
@@ -267,6 +293,11 @@ public class LobbyService {
             .orElseThrow(() -> LobbyErrorCode.FORBIDDEN_ACCESS.exception(HttpStatus.FORBIDDEN));
     }
 
+    private LobbyMembership requireAnyMember(Long lobbyId, Long userId) {
+        return lobbyMembershipRepository.findByLobby_IdAndUser_Id(lobbyId, userId)
+            .orElseThrow(() -> LobbyErrorCode.FORBIDDEN_ACCESS.exception(HttpStatus.FORBIDDEN));
+    }
+
     private LobbyMembership requireHost(Long lobbyId, Long userId) {
         LobbyMembership membership = requireActiveMember(lobbyId, userId);
         if (!membership.isHost()) {
@@ -401,6 +432,35 @@ public class LobbyService {
             membership.getStatus().name(),
             membership.getJoinedAt() == null ? null : membership.getJoinedAt().toString(),
             membership.getLeftAt() == null ? null : membership.getLeftAt().toString()
+        );
+    }
+
+    private MyLobbyResponse toMyLobbyResponse(LobbyMembership membership) {
+        Lobby lobby = membership.getLobby();
+        return new MyLobbyResponse(
+            lobby.getId(),
+            lobby.getRestaurantName(),
+            lobby.getDeliveryLocation().name(),
+            lobby.getOrderStatus().name(),
+            lobby.getHost().getName(),
+            lobbyMembershipRepository.countByLobby_Id(lobby.getId()),
+            membership.getRoleInLobby().name(),
+            membership.getStatus().name(),
+            membership.getJoinedAt() == null ? null : membership.getJoinedAt().toString(),
+            membership.getLeftAt() == null ? null : membership.getLeftAt().toString()
+        );
+    }
+
+    private LobbyMemberResponse toMemberResponse(LobbyMembership membership) {
+        return new LobbyMemberResponse(
+            membership.getUser().getId(),
+            membership.getUser().getName(),
+            membership.getRoleInLobby().name(),
+            membership.getStatus().name(),
+            membership.getJoinedAt() == null ? null : membership.getJoinedAt().toString(),
+            membership.getLeftAt() == null ? null : membership.getLeftAt().toString(),
+            membership.getLastReadMessageId(),
+            membership.getLastReadAt() == null ? null : membership.getLastReadAt().toString()
         );
     }
 

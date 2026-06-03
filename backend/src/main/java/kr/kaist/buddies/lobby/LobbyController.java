@@ -7,6 +7,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import java.util.List;
 import kr.kaist.buddies.auth.AuthenticatedUser;
 import kr.kaist.buddies.auth.CurrentUser;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -29,10 +30,10 @@ public class LobbyController {
     @GetMapping
     public List<LobbySummaryResponse> list(
         @CurrentUser AuthenticatedUser user,
-        @RequestParam(required = false) String deliveryLocation,
+        @RequestParam(required = false) String deliveryZone,
         @RequestParam(required = false) String restaurantName
     ) {
-        return lobbyService.list(user.id(), deliveryLocation, restaurantName);
+        return lobbyService.list(user.id(), deliveryZone, restaurantName);
     }
 
     @PostMapping
@@ -40,9 +41,26 @@ public class LobbyController {
         return lobbyService.create(user.id(), request);
     }
 
+    @GetMapping("/me/active")
+    public ResponseEntity<LobbySummaryResponse> activeLobby(@CurrentUser AuthenticatedUser user) {
+        return lobbyService.activeLobby(user.id())
+            .map(ResponseEntity::ok)
+            .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    @GetMapping("/me")
+    public List<MyLobbyResponse> myLobbies(@CurrentUser AuthenticatedUser user) {
+        return lobbyService.myLobbies(user.id());
+    }
+
     @GetMapping("/{lobbyId}")
     public LobbyResponse get(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
         return lobbyService.get(user.id(), lobbyId);
+    }
+
+    @GetMapping("/{lobbyId}/members")
+    public List<LobbyMemberResponse> members(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+        return lobbyService.members(user.id(), lobbyId);
     }
 
     @PostMapping("/{lobbyId}/join")
@@ -82,7 +100,7 @@ public class LobbyController {
 
     public record CreateLobbyRequest(
         @NotBlank String restaurantName,
-        @NotBlank String deliveryLocation,
+        @NotBlank String deliveryZone,
         @PositiveOrZero long minimumOrderAmount,
         @PositiveOrZero long deliveryFee
     ) {}
@@ -95,7 +113,7 @@ public class LobbyController {
         String hostName,
         double hostTrustScore,
         String restaurantName,
-        String deliveryLocation,
+        String deliveryZone,
         long minimumOrderAmount,
         long currentTotalAmount,
         long remainingAmount,
@@ -108,7 +126,7 @@ public class LobbyController {
         Long lobbyId,
         Long hostUserId,
         String restaurantName,
-        String deliveryLocation,
+        String deliveryZone,
         long minimumOrderAmount,
         long currentTotalAmount,
         long deliveryFee,
@@ -124,6 +142,28 @@ public class LobbyController {
     public record LobbyMembershipResponse(
         Long lobbyId,
         Long userId,
+        String roleInLobby,
+        String membershipStatus,
+        String joinedAt,
+        String leftAt
+    ) {}
+    public record LobbyMemberResponse(
+        Long userId,
+        String name,
+        String roleInLobby,
+        String membershipStatus,
+        String joinedAt,
+        String leftAt,
+        Long lastReadMessageId,
+        String lastReadAt
+    ) {}
+    public record MyLobbyResponse(
+        Long lobbyId,
+        String restaurantName,
+        String deliveryZone,
+        String orderStatus,
+        String hostName,
+        long participantCount,
         String roleInLobby,
         String membershipStatus,
         String joinedAt,
