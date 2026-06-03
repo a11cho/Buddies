@@ -14,6 +14,7 @@ class ChatMessage {
     this.createdAt,
     this.eventType,
     this.targetUserId,
+    this.eventMetadata = const {},
   });
 
   final int id;
@@ -25,6 +26,7 @@ class ChatMessage {
   final DateTime? createdAt;
   final String? eventType;
   final int? targetUserId;
+  final Map<String, Object?> eventMetadata;
 
   bool get isSystem => messageType == ChatMessageType.system;
 
@@ -42,6 +44,7 @@ class ChatMessage {
     DateTime? createdAt,
     String? eventType,
     int? targetUserId,
+    Map<String, Object?>? eventMetadata,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -53,6 +56,7 @@ class ChatMessage {
       createdAt: createdAt ?? this.createdAt,
       eventType: eventType ?? this.eventType,
       targetUserId: targetUserId ?? this.targetUserId,
+      eventMetadata: eventMetadata ?? this.eventMetadata,
     );
   }
 
@@ -67,6 +71,7 @@ class ChatMessage {
       createdAt: parseNullableDateTime(json['createdAt']),
       eventType: json['eventType'] as String?,
       targetUserId: parseNullableJsonInt(json['targetUserId'], 'targetUserId'),
+      eventMetadata: _parseEventMetadata(json['eventMetadata']),
     );
   }
 
@@ -81,6 +86,21 @@ class ChatMessage {
       'createdAt': createdAt?.toIso8601String(),
       'eventType': eventType,
       'targetUserId': targetUserId,
+      'eventMetadata': eventMetadata,
     };
+  }
+
+  static Map<String, Object?> _parseEventMetadata(Object? value) {
+    if (value is Map<String, dynamic>) {
+      return Map<String, Object?>.from(value);
+    }
+    if (value is Map) {
+      final metadata = <String, Object?>{};
+      value.forEach((key, metadataValue) {
+        metadata[key.toString()] = metadataValue;
+      });
+      return metadata;
+    }
+    return const {};
   }
 }
