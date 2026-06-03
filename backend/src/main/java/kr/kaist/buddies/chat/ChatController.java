@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 import kr.kaist.buddies.auth.AuthenticatedUser;
 import kr.kaist.buddies.auth.CurrentUser;
 import org.springframework.http.HttpStatus;
@@ -91,6 +92,7 @@ public class ChatController {
         Long targetUserId,
         String content,
         String mediaUrl,
+        Map<String, Object> eventMetadata,
         String createdAt
     ) {}
 

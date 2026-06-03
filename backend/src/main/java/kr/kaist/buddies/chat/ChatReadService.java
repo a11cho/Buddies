@@ -12,16 +12,28 @@ public class ChatReadService {
     }
 
     public long countUnread(Long lobbyId, Long lastReadMessageId) {
+        if (lastReadMessageId == null) {
+            Long count = jdbcTemplate.queryForObject(
+                """
+                select count(*)
+                from chat_messages
+                where lobby_id = ?
+                """,
+                Long.class,
+                lobbyId
+            );
+            return count == null ? 0 : count;
+        }
+
         Long count = jdbcTemplate.queryForObject(
             """
             select count(*)
             from chat_messages
             where lobby_id = ?
-              and (? is null or id > ?)
+              and id > ?
             """,
             Long.class,
             lobbyId,
-            lastReadMessageId,
             lastReadMessageId
         );
         return count == null ? 0 : count;

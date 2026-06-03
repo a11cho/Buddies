@@ -46,6 +46,9 @@ public class ChatMessage {
     @Column(name = "target_user_id")
     private Long targetUserId;
 
+    @Column(name = "event_metadata_json", nullable = false, columnDefinition = "TEXT")
+    private String eventMetadataJson;
+
     @Column(name = "is_archived", nullable = false)
     private boolean archived;
 
@@ -56,7 +59,7 @@ public class ChatMessage {
     }
 
     public ChatMessage(Lobby lobby, User sender, ChatMessageType messageType, String content, String mediaUrl, Instant createdAt) {
-        this(lobby, sender, messageType, content, mediaUrl, null, null, createdAt);
+        this(lobby, sender, messageType, content, mediaUrl, null, null, "{}", createdAt);
     }
 
     public ChatMessage(
@@ -69,6 +72,20 @@ public class ChatMessage {
         Long targetUserId,
         Instant createdAt
     ) {
+        this(lobby, sender, messageType, content, mediaUrl, eventType, targetUserId, "{}", createdAt);
+    }
+
+    public ChatMessage(
+        Lobby lobby,
+        User sender,
+        ChatMessageType messageType,
+        String content,
+        String mediaUrl,
+        String eventType,
+        Long targetUserId,
+        String eventMetadataJson,
+        Instant createdAt
+    ) {
         this.lobby = lobby;
         this.sender = sender;
         this.messageType = messageType;
@@ -76,6 +93,7 @@ public class ChatMessage {
         this.mediaUrl = mediaUrl;
         this.eventType = eventType;
         this.targetUserId = targetUserId;
+        this.eventMetadataJson = eventMetadataJson == null || eventMetadataJson.isBlank() ? "{}" : eventMetadataJson;
         this.createdAt = createdAt;
         this.archived = false;
     }
@@ -110,6 +128,10 @@ public class ChatMessage {
 
     public Long getTargetUserId() {
         return targetUserId;
+    }
+
+    public String getEventMetadataJson() {
+        return eventMetadataJson;
     }
 
     public boolean isArchived() {
