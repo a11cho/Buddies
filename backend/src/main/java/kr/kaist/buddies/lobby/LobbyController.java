@@ -155,7 +155,8 @@ public class LobbyController {
         String joinedAt,
         String leftAt,
         Long lastReadMessageId,
-        String lastReadAt
+        String lastReadAt,
+        double trustScore
     ) {}
     public record MyLobbyResponse(
         Long lobbyId,
