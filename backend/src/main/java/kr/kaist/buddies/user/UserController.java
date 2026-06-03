@@ -36,6 +36,19 @@ public class UserController {
         return userService.updateProfile(user.id(), request);
     }
 
+    @GetMapping("/users/me/payment-info")
+    public PaymentInfoResponse paymentInfo(@CurrentUser AuthenticatedUser user) {
+        return userService.paymentInfo(user.id());
+    }
+
+    @PatchMapping("/users/me/payment-info")
+    public PaymentInfoResponse updatePaymentInfo(
+        @CurrentUser AuthenticatedUser user,
+        @Valid @RequestBody PaymentInfoRequest request
+    ) {
+        return userService.updatePaymentInfo(user.id(), request.bankName(), request.accountNumber(), request.accountHolderName());
+    }
+
     @PostMapping("/users/me/profile-image/upload-url")
     public ProfileImageUploadUrlResponse profileImageUploadUrl(
         @CurrentUser AuthenticatedUser user,
@@ -67,11 +80,13 @@ public class UserController {
     }
 
     public record UpdateProfileRequest(@NotBlank String name, String profileImageUrl) {}
+    public record PaymentInfoRequest(@NotBlank String bankName, @NotBlank String accountNumber, @NotBlank String accountHolderName) {}
     public record ProfileImageUploadUrlRequest(@NotBlank String filename, @NotBlank String contentType) {}
     public record ProfileImageUploadUrlResponse(String uploadUrl, String mediaUrl) {}
     public record RatingRequest(Long lobbyId, Long targetUserId, @Min(1) @Max(5) int rating, String feedback) {}
     public record SupportTicketRequest(@NotBlank String category, @NotBlank String title, @NotBlank String body, Long lobbyId) {}
     public record ProfileResponse(Long id, String email, String name, String role, String profileImageUrl, double trustScore, String status) {}
+    public record PaymentInfoResponse(String bankName, String accountNumber, String accountHolderName, String updatedAt) {}
     public record OrderHistoryResponse(List<OrderHistoryItem> items) {}
     public record OrderHistoryItem(Long lobbyId, String restaurantName, String deliveryLocation, String deliveredAt, String hostName, int participantCount, long totalAmount, long myAmount, String receiptImageUrl, boolean canRate) {}
     public record FaqResponse(String key, String answer) {}

@@ -2,8 +2,6 @@ package kr.kaist.buddies.lobby;
 
 import java.time.Instant;
 import java.util.List;
-import kr.kaist.buddies.auth.domain.HostPaymentInfo;
-import kr.kaist.buddies.auth.domain.HostPaymentInfoRepository;
 import kr.kaist.buddies.chat.ChatArchiveService;
 import kr.kaist.buddies.chat.ChatReadService;
 import kr.kaist.buddies.lobby.LobbyController.CreateLobbyRequest;
@@ -26,6 +24,8 @@ import kr.kaist.buddies.lobby.domain.LobbyMembershipRepository;
 import kr.kaist.buddies.lobby.domain.LobbyMembershipStatus;
 import kr.kaist.buddies.lobby.domain.LobbyOrderStatus;
 import kr.kaist.buddies.lobby.domain.LobbyRepository;
+import kr.kaist.buddies.user.domain.HostPaymentInfo;
+import kr.kaist.buddies.user.domain.HostPaymentInfoRepository;
 import kr.kaist.buddies.user.domain.User;
 import kr.kaist.buddies.user.domain.UserRepository;
 import org.springframework.http.HttpStatus;
