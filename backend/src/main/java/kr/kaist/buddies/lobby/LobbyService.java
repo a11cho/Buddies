@@ -460,7 +460,8 @@ public class LobbyService {
             membership.getJoinedAt() == null ? null : membership.getJoinedAt().toString(),
             membership.getLeftAt() == null ? null : membership.getLeftAt().toString(),
             membership.getLastReadMessageId(),
-            membership.getLastReadAt() == null ? null : membership.getLastReadAt().toString()
+            membership.getLastReadAt() == null ? null : membership.getLastReadAt().toString(),
+            membership.getUser().getTrustScore().doubleValue()
         );
     }
 
