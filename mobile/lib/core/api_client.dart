@@ -8,7 +8,10 @@ import 'token_storage.dart';
 // 실제 REST API 연결 단계에서 사용할 기본 설정입니다.
 class ApiClientConfig {
   const ApiClientConfig({
-    this.baseUrl = 'http://localhost:8080',
+    this.baseUrl = const String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: 'https://localhost:8443',
+    ),
     this.timeout = const Duration(seconds: 20),
   });
 

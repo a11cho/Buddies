@@ -7,7 +7,7 @@ import '../services/user_service.dart';
 class ApiUserService implements UserService {
   ApiUserService({
     required ApiClient apiClient,
-    this.userBasePath = '/api/users',
+    this.userBasePath = '/users',
   }) : _apiClient = apiClient;
 
   final ApiClient _apiClient;

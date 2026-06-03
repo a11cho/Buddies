@@ -23,7 +23,7 @@ class MockChatService implements ChatService {
     final lobby = _store.findLobby(lobbyId);
     _ensureCurrentUserIsActiveMember(lobby);
     return ChatConnectionInfo(
-      serverUrl: 'ws://localhost:8080/ws',
+      serverUrl: 'wss://localhost:8443/ws',
       subscribeDestination: '/topic/lobbies/$lobbyId/chat',
       sendDestination: '/app/lobbies/$lobbyId/chat/send',
       errorDestination: '/user/queue/chat-errors',

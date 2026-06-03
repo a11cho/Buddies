@@ -5,7 +5,7 @@ import '../services/auth_service.dart';
 class ApiAuthService implements AuthService {
   ApiAuthService({
     required ApiClient apiClient,
-    this.authBasePath = '/api/auth',
+    this.authBasePath = '/auth',
   }) : _apiClient = apiClient;
 
   final ApiClient _apiClient;
