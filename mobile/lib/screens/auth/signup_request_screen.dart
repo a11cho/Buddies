@@ -22,6 +22,23 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
   final TextEditingController _passwordController = TextEditingController();
   bool _isSubmitting = false;
 
+  bool get _canRequestOtp {
+    final emailId = _emailController.text.trim();
+    final name = _nameController.text.trim();
+    return emailId.isNotEmpty &&
+        !emailId.contains('@') &&
+        name.isNotEmpty &&
+        _isPasswordValid;
+  }
+
+  bool get _isPasswordValid {
+    final password = _passwordController.text;
+    return _hasMinPasswordLength(password) &&
+        _hasLetter(password) &&
+        _hasNumber(password) &&
+        _hasSpecialCharacter(password);
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -44,12 +61,14 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
             keyboardType: TextInputType.emailAddress,
             prefixIcon: Icons.mail_outline,
             suffixText: '@kaist.ac.kr',
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
           TextInputField(
             controller: _nameController,
             label: 'Name',
             prefixIcon: Icons.badge_outlined,
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
           TextInputField(
@@ -57,14 +76,27 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
             label: 'Password',
             obscureText: true,
             prefixIcon: Icons.lock_outline,
+            onChanged: (_) => setState(() {}),
           ),
+          const SizedBox(height: 8),
+          _PasswordRequirementList(password: _passwordController.text),
           const SizedBox(height: 24),
           PrimaryButton(
             label: 'Request OTP',
             icon: Icons.mark_email_read_outlined,
             isLoading: _isSubmitting,
-            onPressed: _submit,
+            onPressed: _canRequestOtp ? _submit : null,
           ),
+          if (!_canRequestOtp) ...[
+            const SizedBox(height: 8),
+            Text(
+              '이메일 ID, 이름, 비밀번호 조건을 모두 만족해야 합니다.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ],
       ),
     );
@@ -92,6 +124,13 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
         const SnackBar(
           content: Text('Enter only the part before @kaist.ac.kr.'),
         ),
+      );
+      return;
+    }
+
+    if (!_isPasswordValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('비밀번호 조건을 모두 만족해야 합니다.')),
       );
       return;
     }
@@ -126,5 +165,96 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
         });
       }
     }
+  }
+
+  bool _hasMinPasswordLength(String password) {
+    return password.length >= 8;
+  }
+
+  bool _hasLetter(String password) {
+    return RegExp(r'[A-Za-z]').hasMatch(password);
+  }
+
+  bool _hasNumber(String password) {
+    return RegExp(r'[0-9]').hasMatch(password);
+  }
+
+  bool _hasSpecialCharacter(String password) {
+    const allowedSpecialCharacters = r'''!@#$%^&*()_+-=[]{};':"\|,.<>/?`~''';
+    return password.split('').any(allowedSpecialCharacters.contains);
+  }
+}
+
+class _PasswordRequirementList extends StatelessWidget {
+  const _PasswordRequirementList({required this.password});
+
+  final String password;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _PasswordRequirementRow(
+          isMet: password.length >= 8,
+          label: '8자 이상',
+        ),
+        _PasswordRequirementRow(
+          isMet: RegExp(r'[A-Za-z]').hasMatch(password),
+          label: '영문 1개 이상',
+        ),
+        _PasswordRequirementRow(
+          isMet: RegExp(r'[0-9]').hasMatch(password),
+          label: '숫자 1개 이상',
+        ),
+        _PasswordRequirementRow(
+          isMet: _hasSpecialCharacter(password),
+          label: '특수문자 1개 이상',
+        ),
+      ],
+    );
+  }
+
+  bool _hasSpecialCharacter(String password) {
+    const allowedSpecialCharacters = r'''!@#$%^&*()_+-=[]{};':"\|,.<>/?`~''';
+    return password.split('').any(allowedSpecialCharacters.contains);
+  }
+}
+
+class _PasswordRequirementRow extends StatelessWidget {
+  const _PasswordRequirementRow({
+    required this.isMet,
+    required this.label,
+  });
+
+  final bool isMet;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isMet
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.outline;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(
+            isMet ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 18,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: color,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
