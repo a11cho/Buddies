@@ -33,6 +33,10 @@ services:
       SERVER_SSL_KEY_STORE: /app/ssl/dev-ssl.p12
       SERVER_SSL_KEY_STORE_PASSWORD: buddies-local-ssl
       BUDDIES_EXTERNAL_ACCESS: ${BUDDIES_EXTERNAL_ACCESS:-false}
+      BUDDIES_PUBLIC_BASE_URL: https://localhost:8443
+      BUDDIES_GCS_BUCKET_NAME: buddies-project-image-storage
+      BUDDIES_GCS_PUBLIC_BASE_URL: https://buddies-project-image-storage.storage.googleapis.com
+      GOOGLE_APPLICATION_CREDENTIALS: /app/config/gcp-service-account.json
       BUDDIES_PASSWORD_RESET_URL_TEMPLATE: https://localhost:8443/password-reset?token=%s
     volumes:
       - ./backend/config:/app/config:ro

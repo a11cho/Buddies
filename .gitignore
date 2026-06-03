@@ -26,6 +26,7 @@ mobile/coverage/
 !.env.example
 backend/config/mail-secrets.yml
 backend/config/dev-ssl.p12
+backend/config/gcp-service-account.json
 *.log
 .DS_Store
 Thumbs.db

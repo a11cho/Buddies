@@ -20,6 +20,8 @@ import kr.kaist.buddies.lobby.domain.LobbyMembership;
 import kr.kaist.buddies.lobby.domain.LobbyMembershipRepository;
 import kr.kaist.buddies.lobby.domain.LobbyMembershipStatus;
 import kr.kaist.buddies.lobby.domain.LobbyRepository;
+import kr.kaist.buddies.storage.ImageUploadUrlService;
+import kr.kaist.buddies.storage.ImageUploadUrlService.ImageUploadUrl;
 import kr.kaist.buddies.user.domain.User;
 import kr.kaist.buddies.user.domain.UserRepository;
 import kr.kaist.buddies.user.domain.UserStatus;
@@ -52,6 +54,7 @@ public class ChatService {
     private final ChatReadService chatReadService;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final ImageUploadUrlService imageUploadUrlService;
 
     public ChatService(
         ChatMessageRepository chatMessageRepository,
@@ -60,7 +63,8 @@ public class ChatService {
         UserRepository userRepository,
         ChatReadService chatReadService,
         ApplicationEventPublisher eventPublisher,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        ImageUploadUrlService imageUploadUrlService
     ) {
         this.chatMessageRepository = chatMessageRepository;
         this.lobbyRepository = lobbyRepository;
@@ -69,6 +73,7 @@ public class ChatService {
         this.chatReadService = chatReadService;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
+        this.imageUploadUrlService = imageUploadUrlService;
     }
 
     @Transactional(readOnly = true)
@@ -165,11 +170,8 @@ public class ChatService {
     public ImageUploadUrlResponse issueUploadUrl(Long userId, Long lobbyId, ImageUploadUrlRequest request) {
         requireActiveMember(lobbyId, userId);
         requireSupportedImageType(request.contentType());
-        String safeFilename = request.filename().replaceAll("[^A-Za-z0-9._-]", "_");
-        return new ImageUploadUrlResponse(
-            "https://example.com/upload/" + safeFilename,
-            "https://cdn.example.com/chat/" + safeFilename
-        );
+        ImageUploadUrl uploadUrl = imageUploadUrlService.issue("chat/" + lobbyId, request.contentType());
+        return new ImageUploadUrlResponse(uploadUrl.uploadUrl(), uploadUrl.mediaUrl());
     }
 
     private Lobby requireOpenLobby(Long lobbyId) {
