@@ -5,7 +5,6 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -50,19 +49,6 @@ public class AuthController {
         return authService.me(user.id());
     }
 
-    @GetMapping("/me/payment-info")
-    public PaymentInfoResponse paymentInfo(@CurrentUser AuthenticatedUser user) {
-        return authService.paymentInfo(user.id());
-    }
-
-    @PatchMapping("/me/payment-info")
-    public PaymentInfoResponse updatePaymentInfo(
-        @CurrentUser AuthenticatedUser user,
-        @Valid @RequestBody PaymentInfoRequest request
-    ) {
-        return authService.updatePaymentInfo(user.id(), request.bankName(), request.accountNumber(), request.accountHolderName());
-    }
-
     @PostMapping("/refresh")
     public LoginResponse refresh(@CurrentUser AuthenticatedUser user) {
         return authService.refresh(user.id());
@@ -90,7 +76,6 @@ public class AuthController {
     public record SignupVerifyRequest(@Email @NotBlank String email, @NotBlank String otp) {}
     public record EmailRequest(@Email @NotBlank String email) {}
     public record LoginRequest(@Email @NotBlank String email, @NotBlank String password) {}
-    public record PaymentInfoRequest(@NotBlank String bankName, @NotBlank String accountNumber, @NotBlank String accountHolderName) {}
     public record PasswordResetConfirmRequest(
         @NotBlank String token,
         @NotBlank String newPassword,
@@ -98,6 +83,5 @@ public class AuthController {
     ) {}
     public record LoginResponse(String accessToken, String tokenType, long expiresIn) {}
     public record MeResponse(Long id, String email, String name, String role) {}
-    public record PaymentInfoResponse(String bankName, String accountNumber, String accountHolderName, String updatedAt) {}
     public record MessageResponse(String message) {}
 }

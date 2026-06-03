@@ -1,4 +1,4 @@
-package kr.kaist.buddies.auth.domain;
+package kr.kaist.buddies.user.domain;
 
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
