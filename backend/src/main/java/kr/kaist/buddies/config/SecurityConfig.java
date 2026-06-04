@@ -2,6 +2,9 @@ package kr.kaist.buddies.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import kr.kaist.buddies.auth.JwtAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,6 +31,9 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
     @Value("${buddies.cors.allowed-origins:http://localhost:5173}")
     private String allowedOrigins;
+
+    @Value("${buddies.external-access:false}")
+    private boolean externalAccess;
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter, ObjectMapper objectMapper) throws Exception {
@@ -78,7 +84,17 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(java.util.Arrays.stream(allowedOrigins.split(",")).map(String::trim).toList());
+        List<String> allowedOriginPatterns = new ArrayList<>(
+            Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList()
+        );
+        if (externalAccess) {
+            allowedOriginPatterns.add("http://*:5173");
+            allowedOriginPatterns.add("https://*:5173");
+        }
+        configuration.setAllowedOriginPatterns(allowedOriginPatterns);
         configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type"));
         configuration.setExposedHeaders(java.util.List.of("Authorization"));

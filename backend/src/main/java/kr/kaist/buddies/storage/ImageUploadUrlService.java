@@ -33,7 +33,7 @@ public class ImageUploadUrlService {
         this.bucketName = normalize(bucketName);
         this.gcsPublicBaseUrl = trimTrailingSlash(gcsPublicBaseUrl);
         this.signedUrlExpiresMinutes = signedUrlExpiresMinutes <= 0 ? 15 : signedUrlExpiresMinutes;
-        this.storage = StorageOptions.getDefaultInstance().getService();
+        this.storage = this.bucketName == null ? null : StorageOptions.getDefaultInstance().getService();
     }
 
     public ImageUploadUrl issue(String directory, String contentType) {

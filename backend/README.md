@@ -21,7 +21,7 @@ For local non-Docker runs, generate `backend/config/dev-ssl.p12` first. PowerShe
 Manual local generation, if `keytool` is installed locally:
 
 ```bash
-keytool -genkeypair -alias buddies-local -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore backend/config/dev-ssl.p12 -storepass buddies-local-ssl -keypass buddies-local-ssl -validity 3650 -dname "CN=localhost, OU=Development, O=Buddies, L=Daejeon, ST=Daejeon, C=KR" -ext "SAN=dns:localhost,ip:127.0.0.1"
+keytool -genkeypair -alias buddies-local -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore backend/config/dev-ssl.p12 -storepass buddies-local-ssl -keypass buddies-local-ssl -validity 3650 -dname "CN=110.76.94.211, OU=Development, O=Buddies, L=Daejeon, ST=Daejeon, C=KR" -ext "SAN=dns:localhost,ip:127.0.0.1,ip:110.76.94.211"
 ```
 
 ## Run Locally
@@ -37,7 +37,7 @@ The local backend uses HTTPS by default on `https://localhost:8443` with the dev
 If `config/dev-ssl.p12` is missing, generate a local development keystore:
 
 ```bash
-keytool -genkeypair -alias buddies-local -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore config/dev-ssl.p12 -storepass buddies-local-ssl -keypass buddies-local-ssl -validity 3650 -dname "CN=localhost, OU=Development, O=Buddies, L=Daejeon, ST=Daejeon, C=KR" -ext "SAN=dns:localhost,ip:127.0.0.1"
+keytool -genkeypair -alias buddies-local -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore config/dev-ssl.p12 -storepass buddies-local-ssl -keypass buddies-local-ssl -validity 3650 -dname "CN=110.76.94.211, OU=Development, O=Buddies, L=Daejeon, ST=Daejeon, C=KR" -ext "SAN=dns:localhost,ip:127.0.0.1,ip:110.76.94.211"
 ```
 
 Do not use this development keystore in production.

@@ -1,5 +1,8 @@
 package kr.kaist.buddies.auth;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import kr.kaist.buddies.config.PublicUrlBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -18,20 +21,23 @@ public class EmailOtpSender {
     private final String from;
     private final String signupSubject;
     private final String passwordResetSubject;
-    private final String passwordResetUrlTemplate;
+    private final PublicUrlBuilder publicUrlBuilder;
+    private final boolean failOnSendError;
 
     public EmailOtpSender(
         ObjectProvider<JavaMailSender> mailSenderProvider,
         @Value("${buddies.mail.from}") String from,
         @Value("${buddies.mail.signup-subject}") String signupSubject,
         @Value("${buddies.mail.password-reset-subject}") String passwordResetSubject,
-        @Value("${buddies.password-reset.url-template}") String passwordResetUrlTemplate
+        @Value("${buddies.mail.fail-on-send-error:false}") boolean failOnSendError,
+        PublicUrlBuilder publicUrlBuilder
     ) {
         this.mailSenderProvider = mailSenderProvider;
         this.from = from;
         this.signupSubject = signupSubject;
         this.passwordResetSubject = passwordResetSubject;
-        this.passwordResetUrlTemplate = passwordResetUrlTemplate;
+        this.failOnSendError = failOnSendError;
+        this.publicUrlBuilder = publicUrlBuilder;
     }
 
     public void sendSignupOtp(String email, String otp) {
@@ -57,6 +63,10 @@ public class EmailOtpSender {
             mailSender.send(message);
         } catch (MailException exception) {
             log.warn("Failed to send signup OTP email to {}", email, exception);
+            log.info("Signup OTP fallback for {}: {}", email, otp);
+            if (!failOnSendError) {
+                return;
+            }
             throw new AuthException(HttpStatus.INTERNAL_SERVER_ERROR, "인증 코드 이메일 발송에 실패했습니다.");
         }
     }
@@ -67,7 +77,7 @@ public class EmailOtpSender {
             throw new AuthException(HttpStatus.INTERNAL_SERVER_ERROR, "메일 발송 설정이 없습니다.");
         }
 
-        String resetLink = passwordResetUrlTemplate.formatted(token);
+        String resetLink = publicUrlBuilder.url("/password-reset?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8));
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(email);
@@ -86,6 +96,10 @@ public class EmailOtpSender {
             mailSender.send(message);
         } catch (MailException exception) {
             log.warn("Failed to send password reset email to {}", email, exception);
+            log.info("Password reset link fallback for {}: {}", email, resetLink);
+            if (!failOnSendError) {
+                return;
+            }
             throw new AuthException(HttpStatus.INTERNAL_SERVER_ERROR, "비밀번호 재설정 이메일 발송에 실패했습니다.");
         }
     }
