@@ -37,6 +37,7 @@ services:
       BUDDIES_GCS_BUCKET_NAME: buddies-project-image-storage
       BUDDIES_GCS_PUBLIC_BASE_URL: https://buddies-project-image-storage.storage.googleapis.com
       GOOGLE_APPLICATION_CREDENTIALS: /app/config/gcp-service-account.json
+      BUDDIES_EXTERNAL_ACCESS: ${BUDDIES_EXTERNAL_ACCESS:-false}
       BUDDIES_PASSWORD_RESET_URL_TEMPLATE: https://localhost:8443/password-reset?token=%s
     volumes:
       - ./backend/config:/app/config:ro
