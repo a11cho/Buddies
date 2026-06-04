@@ -1,5 +1,8 @@
 package kr.kaist.buddies.auth;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import kr.kaist.buddies.config.PublicUrlBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -18,20 +21,20 @@ public class EmailOtpSender {
     private final String from;
     private final String signupSubject;
     private final String passwordResetSubject;
-    private final String passwordResetUrlTemplate;
+    private final PublicUrlBuilder publicUrlBuilder;
 
     public EmailOtpSender(
         ObjectProvider<JavaMailSender> mailSenderProvider,
         @Value("${buddies.mail.from}") String from,
         @Value("${buddies.mail.signup-subject}") String signupSubject,
         @Value("${buddies.mail.password-reset-subject}") String passwordResetSubject,
-        @Value("${buddies.password-reset.url-template}") String passwordResetUrlTemplate
+        PublicUrlBuilder publicUrlBuilder
     ) {
         this.mailSenderProvider = mailSenderProvider;
         this.from = from;
         this.signupSubject = signupSubject;
         this.passwordResetSubject = passwordResetSubject;
-        this.passwordResetUrlTemplate = passwordResetUrlTemplate;
+        this.publicUrlBuilder = publicUrlBuilder;
     }
 
     public void sendSignupOtp(String email, String otp) {
@@ -67,7 +70,7 @@ public class EmailOtpSender {
             throw new AuthException(HttpStatus.INTERNAL_SERVER_ERROR, "메일 발송 설정이 없습니다.");
         }
 
-        String resetLink = passwordResetUrlTemplate.formatted(token);
+        String resetLink = publicUrlBuilder.url("/password-reset?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8));
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(email);

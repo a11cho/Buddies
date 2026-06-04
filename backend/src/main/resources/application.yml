@@ -52,8 +52,6 @@ buddies:
     from: ${BUDDIES_MAIL_FROM:no-reply@buddies.local}
     signup-subject: ${BUDDIES_MAIL_SIGNUP_SUBJECT:Buddies 인증 코드}
     password-reset-subject: ${BUDDIES_MAIL_PASSWORD_RESET_SUBJECT:Buddies 비밀번호 재설정}
-  password-reset:
-    url-template: ${BUDDIES_PASSWORD_RESET_URL_TEMPLATE:https://localhost:8443/password-reset?token=%s}
   admin:
     bootstrap:
       enabled: ${BUDDIES_ADMIN_BOOTSTRAP_ENABLED:true}
