@@ -30,9 +30,20 @@ Backend health check:
 
 ```bash
 curl -k https://localhost:8443/actuator/health
+curl http://localhost:8080/actuator/health
 ```
 
-To allow another device on the same network to use the local admin web while testing, set `buddies.external-access` in `backend/src/main/resources/application.yml` to `true` and make sure `PublicUrlBuilder.EXTERNAL_PUBLIC_BASE_URL` matches the server address.
+To allow another device on the same network to use the local admin web while testing, set `buddies.external-access` in `backend/src/main/resources/application.yml` to `true` and make sure the external URLs in `PublicUrlBuilder` match the server address.
+
+For HTTP testing without a domain, keep these switches enabled:
+
+```yaml
+buddies:
+  http:
+    enabled: true
+```
+
+This keeps HTTPS on `8443`, also opens HTTP on `8080`, and makes generated external links use `http://110.76.94.211:8080`.
 
 ```bash
 bash backend/scripts/generate-dev-ssl.sh
@@ -45,7 +56,7 @@ PowerShell:
 docker compose up --build
 ```
 
-Then start `admin-web` with `npm run dev` and open `https://110.76.94.211:5173` on the other device. The admin web HTTPS toggle, host, and development certificate path are hard-coded in `admin-web/vite.config.ts`; password reset emails use the external URL hard-coded in `PublicUrlBuilder` when `buddies.external-access=true`, otherwise they use `https://localhost:8443`.
+Then start `admin-web` with `npm run dev` and open `http://110.76.94.211:5173` on the other device. The admin web HTTP/HTTPS toggle, host, and development certificate path are hard-coded in `admin-web/vite.config.ts`; password reset emails use the external URL hard-coded in `PublicUrlBuilder` when `buddies.external-access=true`, otherwise they use `https://localhost:8443`.
 
 The Vite HTTPS server uses a self-signed development certificate, so browsers may still show "not secure". For a browser-trusted HTTPS admin page, point a real domain to the server IP and run:
 

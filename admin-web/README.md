@@ -14,7 +14,7 @@ The Vite dev server proxies `/api` and `/ws` to the HTTPS backend at `https://lo
 To expose the admin web from the Linux server, set these constants in `vite.config.ts`:
 
 ```ts
-const EXTERNAL_HTTPS_ACCESS = true;
+const ALLOW_HTTP_ACCESS = true;
 const EXTERNAL_SERVER_HOST = '110.76.94.211';
 ```
 
@@ -31,7 +31,9 @@ And run the admin web from this directory:
 npm run dev
 ```
 
-Open `https://110.76.94.211:5173` from the external device. The admin web serves HTTPS directly and proxies API traffic to the backend on the same computer.
+Open `http://110.76.94.211:5173` from the external device. With `ALLOW_HTTP_ACCESS=true`, the admin web serves HTTP directly and proxies API traffic to the backend HTTP test port on the same computer.
+
+To switch back to HTTPS testing, set `ALLOW_HTTP_ACCESS=false` and restart `npm run dev`. Then open `https://110.76.94.211:5173`.
 
 If the browser reports `ERR_SSL_VERSION_OR_CIPHER_MISMATCH`, stop the old admin web process and restart `npm run dev`. That error means port `5173` is not serving the HTTPS configuration from `vite.config.ts`.
 

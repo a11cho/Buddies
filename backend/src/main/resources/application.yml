@@ -38,6 +38,9 @@ management:
 
 buddies:
   external-access: true
+  http:
+    enabled: true
+    port: ${BUDDIES_HTTP_PORT:8080}
   storage:
     gcs:
       bucket-name: ${BUDDIES_GCS_BUCKET_NAME:}
@@ -46,7 +49,7 @@ buddies:
   jwt:
     secret: ${BUDDIES_JWT_SECRET:change-this-development-secret-change-this}
   cors:
-    allowed-origins: ${BUDDIES_CORS_ALLOWED_ORIGINS:http://localhost:5173,https://localhost:5173,https://110.76.94.211:5173}
+    allowed-origins: ${BUDDIES_CORS_ALLOWED_ORIGINS:http://localhost:5173,https://localhost:5173,http://110.76.94.211:5173,https://110.76.94.211:5173}
   mail:
     from: ${BUDDIES_MAIL_FROM:no-reply@buddies.local}
     signup-subject: ${BUDDIES_MAIL_SIGNUP_SUBJECT:Buddies signup code}

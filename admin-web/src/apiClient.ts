@@ -156,6 +156,8 @@ type RequestOptions = {
 
 type RequestBody = Record<string, unknown>;
 
+declare const __BUDDIES_ALLOW_HTTP_ACCESS__: boolean;
+
 export class ApiClient {
   constructor(private readonly baseUrl = '/api') {
     this.assertSecureBaseUrl(baseUrl);
@@ -316,6 +318,9 @@ export class ApiClient {
   private assertSecureBaseUrl(baseUrl: string) {
     const url = new URL(baseUrl, window.location.origin);
     const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+    if (__BUDDIES_ALLOW_HTTP_ACCESS__) {
+      return;
+    }
     if (url.protocol !== 'https:' && !isLocalhost) {
       throw new Error('Buddies API requires HTTPS for non-local network communication.');
     }
