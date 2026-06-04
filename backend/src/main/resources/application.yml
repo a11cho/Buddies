@@ -37,6 +37,7 @@ management:
         include: health,info
 
 buddies:
+  external-access: ${BUDDIES_EXTERNAL_ACCESS:false}
   jwt:
     secret: ${BUDDIES_JWT_SECRET:change-this-development-secret-change-this}
   cors:

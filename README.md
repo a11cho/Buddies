@@ -32,6 +32,21 @@ Backend health check:
 curl -k https://localhost:8443/actuator/health
 ```
 
+To allow another device on the same network to use the local admin web while testing, enable external access for the backend:
+
+```bash
+BUDDIES_EXTERNAL_ACCESS=true docker compose up --build
+```
+
+PowerShell:
+
+```powershell
+$env:BUDDIES_EXTERNAL_ACCESS = 'true'
+docker compose up --build
+```
+
+Then start `admin-web` with `npm run dev` and open `http://<your-computer-ip>:5173` on the other device. Leave `BUDDIES_EXTERNAL_ACCESS` unset or set it to `false` for normal localhost-only testing.
+
 The Docker backend image generates a local self-signed PKCS12 keystore at `/app/ssl/dev-ssl.p12` during image build.
 
 If the backend fails with `Could not load store from '/app/config/dev-ssl.p12'` and `Is a directory`, an older container/configuration is still running. Rebuild and recreate the backend container with `docker compose up --build --force-recreate`.
