@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/service_registry.dart';
 import '../../models/user.dart';
@@ -19,10 +20,14 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
+  static const int _maxImageBytes = 5 * 1024 * 1024;
+
   final TextEditingController _nameController = TextEditingController();
+  final ImagePicker _imagePicker = ImagePicker();
   late Future<User> _userFuture;
   String? _profileImageUrl;
   bool _isSubmitting = false;
+  bool _isUploadingPhoto = false;
   bool _loadedInitialValues = false;
 
   @override
@@ -84,18 +89,29 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
-                      onPressed: _chooseProfilePhoto,
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Choose Photo'),
+                      onPressed: _isSubmitting || _isUploadingPhoto
+                          ? null
+                          : _chooseProfilePhoto,
+                      icon: _isUploadingPhoto
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.photo_library_outlined),
+                      label: Text(
+                        _isUploadingPhoto ? 'Uploading...' : 'Choose Photo',
+                      ),
                     ),
                     if (_profileImageUrl != null) ...[
                       const SizedBox(height: 4),
                       TextButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _profileImageUrl = null;
-                          });
-                        },
+                        onPressed: _isSubmitting || _isUploadingPhoto
+                            ? null
+                            : () {
+                                setState(() {
+                                  _profileImageUrl = null;
+                                });
+                              },
                         icon: const Icon(Icons.close),
                         label: const Text('Remove Photo'),
                       ),
@@ -167,73 +183,149 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _chooseProfilePhoto() async {
-    // 실제 사진첩 API 연결 전까지는 mock 이미지 값을 선택하는 방식으로 대체합니다.
-    final selectedProfile = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            children: [
-              for (final option in _profilePhotoOptions)
-                ListTile(
-                  leading: CircleAvatar(backgroundColor: option.color),
-                  title: Text(option.label),
-                  trailing: _profileImageUrl == option.value
-                      ? const Icon(Icons.check)
-                      : null,
-                  onTap: () {
-                    Navigator.pop(context, option.value);
-                  },
-                ),
-            ],
-          ),
-        );
-      },
-    );
+    final source = await _chooseImageSource();
+    if (source == null || !mounted) {
+      return;
+    }
 
-    if (selectedProfile == null) {
+    final pickedImage = await _imagePicker.pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1200,
+    );
+    if (pickedImage == null || !mounted) {
+      return;
+    }
+
+    final attachment = await _attachmentFromPickedImage(pickedImage);
+    if (attachment == null || !mounted) {
       return;
     }
 
     setState(() {
-      _profileImageUrl = selectedProfile;
+      _isUploadingPhoto = true;
     });
+
+    try {
+      final mediaUrl = await AppServices.userService.uploadProfileImage(
+        attachment,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _profileImageUrl = mediaUrl;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Photo uploaded. Save to apply it.')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingPhoto = false;
+        });
+      }
+    }
   }
-}
 
-const List<_ProfilePhotoOption> _profilePhotoOptions = [
-  _ProfilePhotoOption(
-    label: 'Blue Profile',
-    value: 'mock://profile/blue',
-    color: Color(0xFF2563EB),
-  ),
-  _ProfilePhotoOption(
-    label: 'Green Profile',
-    value: 'mock://profile/green',
-    color: Color(0xFF059669),
-  ),
-  _ProfilePhotoOption(
-    label: 'Rose Profile',
-    value: 'mock://profile/rose',
-    color: Color(0xFFE11D48),
-  ),
-  _ProfilePhotoOption(
-    label: 'Yellow Profile',
-    value: 'mock://profile/yellow',
-    color: Color(0xFFCA8A04),
-  ),
-];
+  Future<ImageSource?> _chooseImageSource() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Profile photo',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.photo_library_outlined),
+                  ),
+                  title: const Text('Photo Library'),
+                  onTap: () {
+                    Navigator.pop(context, ImageSource.gallery);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.photo_camera_outlined),
+                  ),
+                  title: const Text('Camera'),
+                  onTap: () {
+                    Navigator.pop(context, ImageSource.camera);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
-class _ProfilePhotoOption {
-  const _ProfilePhotoOption({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
+  Future<ProfileImageAttachment?> _attachmentFromPickedImage(
+    XFile image,
+  ) async {
+    final bytes = await image.readAsBytes();
+    if (bytes.length > _maxImageBytes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image must be 5 MB or smaller.')),
+        );
+      }
+      return null;
+    }
 
-  final String label;
-  final String value;
-  final Color color;
+    final contentType = image.mimeType ?? _inferImageContentType(image.name);
+    if (contentType == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Only JPEG, PNG, GIF, or WebP images are supported.'),
+          ),
+        );
+      }
+      return null;
+    }
+
+    return ProfileImageAttachment(
+      filename: image.name.isEmpty ? 'profile-image.jpg' : image.name,
+      contentType: contentType,
+      bytes: bytes,
+    );
+  }
+
+  String? _inferImageContentType(String filename) {
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+      return 'image/jpeg';
+    }
+    if (lower.endsWith('.png')) {
+      return 'image/png';
+    }
+    if (lower.endsWith('.gif')) {
+      return 'image/gif';
+    }
+    if (lower.endsWith('.webp')) {
+      return 'image/webp';
+    }
+    return null;
+  }
 }

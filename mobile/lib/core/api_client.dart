@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'token_storage.dart';
@@ -12,10 +13,15 @@ class ApiClientConfig {
       'API_BASE_URL',
       defaultValue: 'https://localhost:8443',
     ),
+    this.debugLogs = const bool.fromEnvironment(
+      'API_DEBUG_LOGS',
+      defaultValue: false,
+    ),
     this.timeout = const Duration(seconds: 20),
   });
 
   final String baseUrl;
+  final bool debugLogs;
   final Duration timeout;
 }
 
@@ -122,6 +128,7 @@ class ApiClient {
       method,
       buildUri(path, queryParameters: queryParameters),
     );
+    _log('request $method ${request.url}');
     request.headers.addAll(await _headers(authenticated: authenticated));
     if (body != null) {
       request.body = jsonEncode(body);
@@ -132,11 +139,23 @@ class ApiClient {
             config.timeout,
           );
       final response = await http.Response.fromStream(streamedResponse);
+      _log('response ${response.statusCode} $method ${request.url}');
       return _parseResponse(response);
     } on TimeoutException {
+      _log('timeout $method ${request.url}');
       throw const ApiException(message: 'Request timed out.');
     } on http.ClientException catch (error) {
+      _log('client error $method ${request.url}: ${error.message}');
       throw ApiException(message: error.message);
+    } catch (error) {
+      _log('unexpected error $method ${request.url}: $error');
+      rethrow;
+    }
+  }
+
+  void _log(String message) {
+    if (config.debugLogs) {
+      debugPrint('[ApiClient] $message');
     }
   }
 

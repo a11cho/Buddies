@@ -1,4 +1,11 @@
 import '../api/api_auth_service.dart';
+import '../api/api_chat_service.dart';
+import '../api/api_cart_service.dart';
+import '../api/api_help_service.dart';
+import '../api/api_lobby_service.dart';
+import '../api/api_payment_service.dart';
+import '../api/api_rating_service.dart';
+import '../api/api_report_service.dart';
 import '../api/api_user_service.dart';
 import '../mock/mock_services.dart';
 import '../services/services.dart';
@@ -44,48 +51,48 @@ class AppServices {
     if (useMockLobbyService) {
       return MockLobbyService();
     }
-    throw UnimplementedError('ApiLobbyService is not implemented yet.');
+    return ApiLobbyService(apiClient: apiClient);
   }
 
   static CartService _buildCartService() {
     if (useMockCartService) {
       return MockCartService();
     }
-    throw UnimplementedError('ApiCartService is not implemented yet.');
+    return ApiCartService(apiClient: apiClient);
   }
 
   static PaymentService _buildPaymentService() {
     if (useMockPaymentService) {
       return MockPaymentService();
     }
-    throw UnimplementedError('ApiPaymentService is not implemented yet.');
+    return ApiPaymentService(apiClient: apiClient);
   }
 
   static ChatService _buildChatService() {
     if (useMockChatService) {
       return MockChatService();
     }
-    throw UnimplementedError('ApiChatService is not implemented yet.');
+    return ApiChatService(apiClient: apiClient);
   }
 
   static ReportService _buildReportService() {
     if (useMockReportService) {
       return MockReportService();
     }
-    throw UnimplementedError('ApiReportService is not implemented yet.');
+    return ApiReportService(apiClient: apiClient);
   }
 
   static RatingService _buildRatingService() {
     if (useMockRatingService) {
       return MockRatingService();
     }
-    throw UnimplementedError('ApiRatingService is not implemented yet.');
+    return ApiRatingService(apiClient: apiClient);
   }
 
   static HelpService _buildHelpService() {
     if (useMockHelpService) {
       return MockHelpService();
     }
-    throw UnimplementedError('ApiHelpService is not implemented yet.');
+    return ApiHelpService(apiClient: apiClient);
   }
 }

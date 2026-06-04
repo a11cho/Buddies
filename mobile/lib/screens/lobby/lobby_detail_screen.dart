@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,19 +7,20 @@ import '../../core/app_routes.dart';
 import '../../core/enums.dart';
 import '../../core/service_registry.dart';
 import '../../models/cart_item.dart';
+import '../../models/chat_message.dart';
 import '../../models/lobby.dart';
 import '../../models/lobby_member.dart';
+import '../../models/order_history_item.dart';
 import '../../models/payment_record.dart';
 import '../../models/user.dart';
 import '../../services/cart_service.dart';
 import '../../widgets/app_scaffold.dart';
-import '../../widgets/cart_item_tile.dart';
 import '../../widgets/error_message_view.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/payment_record_tile.dart';
 import '../../widgets/primary_button.dart';
-import '../../widgets/status_card.dart';
 import '../cart/cart_item_form_dialog.dart';
+import '../profile/rating_dialog.dart';
 
 // Lobby 상세 화면입니다.
 // CartItem 편집, Cart Lock, 결제 확인, Lobby 상태 전환을 함께 제공합니다.
@@ -40,6 +43,10 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
   int? _confirmingPaymentRecordId;
   int? _kickingUserId;
   int? _transferringHostUserId;
+  StreamSubscription<ChatMessage>? _lobbyEventSubscription;
+  Timer? _lobbyEventRefreshTimer;
+  int? _subscribedLobbyEventLobbyId;
+  bool _isOpeningClosedLobbyRating = false;
 
   @override
   void didChangeDependencies() {
@@ -50,23 +57,58 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
     final nextLobbyId = arguments is int ? arguments : null;
 
     if (_lobbyId != nextLobbyId) {
+      _cancelLobbyEventSubscription();
       _lobbyId = nextLobbyId;
       _cachedDetailData = null;
       _detailFuture = nextLobbyId == null ? null : _loadDetail(nextLobbyId);
     }
   }
 
+  @override
+  void dispose() {
+    _cancelLobbyEventSubscription();
+    super.dispose();
+  }
+
   Future<_LobbyDetailData> _loadDetail(int lobbyId) async {
-    final user = await AppServices.authService.getMe();
+    final user = await _loadCurrentUser();
     final lobby = await AppServices.lobbyService.getLobbyDetail(lobbyId);
     final myActiveLobby = await AppServices.lobbyService.getMyActiveLobby();
+    final currentHostHasPaymentInfo = lobby.hostUserId == user.id
+        ? await _loadCurrentHostPaymentInfoStatus()
+        : null;
     final data = _LobbyDetailData(
       lobby: lobby,
       currentUser: user,
       isInActiveLobby: myActiveLobby != null,
+      currentHostHasPaymentInfo: currentHostHasPaymentInfo,
     );
-    _cachedDetailData = data;
+    if (mounted) {
+      setState(() {
+        _cachedDetailData = data;
+      });
+      _syncLobbyEventSubscription(data);
+    } else {
+      _cachedDetailData = data;
+    }
     return data;
+  }
+
+  Future<User> _loadCurrentUser() async {
+    try {
+      return await AppServices.userService.getMe();
+    } catch (_) {
+      return AppServices.authService.getMe();
+    }
+  }
+
+  Future<bool?> _loadCurrentHostPaymentInfoStatus() async {
+    try {
+      final paymentInfo = await AppServices.userService.getPaymentInfo();
+      return paymentInfo?.isComplete == true;
+    } catch (_) {
+      return null;
+    }
   }
 
   void _refreshDetail() {
@@ -80,6 +122,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
   }
 
   Future<void> _openChat(Lobby lobby) async {
+    _cancelLobbyEventSubscription();
     await Navigator.pushNamed(
       context,
       AppRoutes.chat,
@@ -89,6 +132,79 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       return;
     }
     _refreshDetail();
+  }
+
+  void _syncLobbyEventSubscription(_LobbyDetailData data) {
+    final shouldSubscribe = _isActiveMember(data.lobby, data.currentUser.id);
+    if (!shouldSubscribe) {
+      _cancelLobbyEventSubscription();
+      return;
+    }
+
+    final lobbyId = data.lobby.lobbyId;
+    if (_subscribedLobbyEventLobbyId == lobbyId &&
+        _lobbyEventSubscription != null) {
+      return;
+    }
+
+    _cancelLobbyEventSubscription();
+    _subscribedLobbyEventLobbyId = lobbyId;
+    _lobbyEventSubscription =
+        AppServices.chatService.watchMessages(lobbyId).listen(
+      _handleLobbyEventMessage,
+      onError: (_) {
+        // Chat 화면이 아니므로 연결 실패를 화면 오류로 노출하지 않습니다.
+      },
+    );
+  }
+
+  void _cancelLobbyEventSubscription() {
+    _lobbyEventRefreshTimer?.cancel();
+    _lobbyEventRefreshTimer = null;
+    _lobbyEventSubscription?.cancel();
+    _lobbyEventSubscription = null;
+    _subscribedLobbyEventLobbyId = null;
+  }
+
+  void _handleLobbyEventMessage(ChatMessage message) {
+    if (!mounted || message.lobbyId != _lobbyId) {
+      return;
+    }
+    if (_isClosedLobbyEvent(message)) {
+      _lobbyEventRefreshTimer?.cancel();
+      unawaited(_openClosedLobbyRatingFlow());
+      return;
+    }
+    if (!_shouldRefreshForLobbyEvent(message)) {
+      return;
+    }
+
+    _lobbyEventRefreshTimer?.cancel();
+    _lobbyEventRefreshTimer = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) {
+        _refreshDetail();
+      }
+    });
+  }
+
+  bool _shouldRefreshForLobbyEvent(ChatMessage message) {
+    final eventType = message.eventType?.trim();
+    return message.isSystem && eventType != null && eventType.isNotEmpty;
+  }
+
+  bool _isClosedLobbyEvent(ChatMessage message) {
+    if (!message.isSystem) {
+      return false;
+    }
+
+    final eventType = message.eventType;
+    final status =
+        (message.eventMetadata['status'] ?? message.eventMetadata['nextStatus'])
+            ?.toString()
+            .trim()
+            .toUpperCase();
+    return status == LobbyStatus.closed &&
+        (eventType == 'lobby.closed' || eventType == 'lobby.status_updated');
   }
 
   Future<void> _joinLobby(Lobby lobby) async {
@@ -126,6 +242,11 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          backgroundColor: const Color(0xFFF5F5FA),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           title: const Text('Leave Lobby'),
           content: const Text(
             'Leave this Lobby? Your cart items will be removed.',
@@ -141,6 +262,10 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
               onPressed: () {
                 Navigator.pop(context, true);
               },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF111111),
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Leave'),
             ),
           ],
@@ -187,6 +312,11 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          backgroundColor: const Color(0xFFF5F5FA),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           title: const Text('Cancel Lobby'),
           content: const Text(
             'Cancel this Lobby? Members will no longer be able to order here.',
@@ -202,6 +332,10 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
               onPressed: () {
                 Navigator.pop(context, true);
               },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF111111),
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Cancel Lobby'),
             ),
           ],
@@ -372,7 +506,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
+        SnackBar(content: Text(_lockCartErrorMessage(error))),
       );
     } finally {
       if (mounted) {
@@ -381,6 +515,15 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
         });
       }
     }
+  }
+
+  String _lockCartErrorMessage(Object error) {
+    final message = error.toString();
+    if (message.contains('LOBBY_ERR31') || message.contains('계좌 정보')) {
+      return 'Payment info is required before locking the cart. '
+          'Please register it in Profile > Payment Settings.';
+    }
+    return message;
   }
 
   Future<void> _kickMember(Lobby lobby, LobbyMember member) async {
@@ -476,15 +619,25 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       _transferringHostUserId = member.userId;
     });
 
+    var didExitScreen = false;
     try {
       await AppServices.lobbyService.transferHost(lobby.lobbyId, member.userId);
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${member.name} is now the Host.')),
+        SnackBar(
+          content: Text(
+            '${member.name} is now the Host. You left this Lobby.',
+          ),
+        ),
       );
-      _refreshDetail();
+      didExitScreen = true;
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
+      } else {
+        Navigator.pushReplacementNamed(context, AppRoutes.lobbyList);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -493,12 +646,33 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
         SnackBar(content: Text(error.toString())),
       );
     } finally {
-      if (mounted) {
+      if (mounted && !didExitScreen) {
         setState(() {
           _transferringHostUserId = null;
         });
       }
     }
+  }
+
+  Future<void> _showMemberProfile(
+    Lobby lobby,
+    LobbyMember member,
+    User currentUser,
+  ) async {
+    final trustScore = member.trustScore ??
+        (member.userId == currentUser.id ? currentUser.trustScore : null) ??
+        (member.userId == lobby.hostUserId ? lobby.hostTrustScore : null);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return _MemberProfileSheet(
+          member: member,
+          trustScore: trustScore,
+        );
+      },
+    );
   }
 
   Future<void> _confirmPaymentRecord(Lobby lobby, int paymentRecordId) async {
@@ -519,8 +693,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
             ? result
             : record;
       }).toList();
-      final allPaymentsPaid =
-          updatedRecords.isNotEmpty &&
+      final allPaymentsPaid = updatedRecords.isNotEmpty &&
           updatedRecords.every((record) => record.isPaid);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -580,17 +753,36 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       _isUpdatingStatus = true;
     });
 
+    var didExitScreen = false;
     try {
-      await AppServices.lobbyService.updateLobbyStatus(
-        lobby.lobbyId,
-        newStatus,
-      );
+      if (newStatus == LobbyStatus.closed) {
+        await AppServices.lobbyService.cancelLobby(lobby.lobbyId);
+      } else {
+        await AppServices.lobbyService.updateLobbyStatus(
+          lobby.lobbyId,
+          newStatus,
+        );
+      }
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lobby status changed to $newStatus.')),
+        SnackBar(
+          content: Text(
+            newStatus == LobbyStatus.closed
+                ? 'Lobby closed. You can rate members now.'
+                : 'Lobby status changed to $newStatus.',
+          ),
+        ),
       );
+      if (newStatus == LobbyStatus.closed) {
+        didExitScreen = true;
+        await _openClosedLobbyRatingFlow(
+          fallbackLobby: lobby,
+          fallbackCurrentUser: _cachedDetailData?.currentUser,
+        );
+        return;
+      }
       _refreshDetail();
     } catch (error) {
       if (!mounted) {
@@ -600,12 +792,103 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
         SnackBar(content: Text(error.toString())),
       );
     } finally {
-      if (mounted) {
+      if (mounted && !didExitScreen) {
         setState(() {
           _isUpdatingStatus = false;
         });
       }
     }
+  }
+
+  Future<void> _openClosedLobbyRatingFlow({
+    Lobby? fallbackLobby,
+    User? fallbackCurrentUser,
+  }) async {
+    if (_isOpeningClosedLobbyRating) {
+      return;
+    }
+
+    final detailData = _cachedDetailData;
+    final lobby = fallbackLobby ?? detailData?.lobby;
+    var currentUser = fallbackCurrentUser ?? detailData?.currentUser;
+    if (lobby == null) {
+      return;
+    }
+    if (currentUser == null) {
+      try {
+        currentUser = await _loadCurrentUser();
+      } catch (_) {
+        return;
+      }
+    }
+
+    _isOpeningClosedLobbyRating = true;
+    _cancelLobbyEventSubscription();
+
+    final historyItem = _ratingHistoryItemForClosedLobby(lobby, currentUser);
+    if (!mounted) {
+      return;
+    }
+
+    if (!historyItem.canRate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No members to rate.')),
+      );
+      Navigator.pushReplacementNamed(context, AppRoutes.lobbyList);
+      return;
+    }
+
+    final didRate = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => RatingDialog(historyItem: historyItem),
+    );
+    if (!mounted) {
+      return;
+    }
+
+    if (didRate == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Rating submitted.')),
+      );
+    }
+    Navigator.pushReplacementNamed(context, AppRoutes.lobbyList);
+  }
+
+  OrderHistoryItem _ratingHistoryItemForClosedLobby(
+    Lobby lobby,
+    User currentUser,
+  ) {
+    final activeMembers = _visibleMembers(lobby);
+    final participants = activeMembers
+        .map(
+          (member) => OrderHistoryParticipant(
+            userId: member.userId,
+            name: member.name,
+          ),
+        )
+        .toList();
+    final rateableParticipants = participants
+        .where((participant) => participant.userId != currentUser.id)
+        .toList();
+    final myAmount = lobby.paymentRecords
+        .where((record) => record.userId == currentUser.id)
+        .fold(0, (sum, record) => sum + record.amount);
+
+    return OrderHistoryItem(
+      lobbyId: lobby.lobbyId,
+      currentUserId: currentUser.id,
+      restaurantName: lobby.restaurantName,
+      hostName: lobby.hostName ?? _memberNameById(lobby, lobby.hostUserId),
+      participantCount: activeMembers.length,
+      totalAmount: lobby.currentTotalAmount,
+      myAmount: myAmount,
+      canRate: rateableParticipants.isNotEmpty,
+      participants: participants,
+      rateableParticipants: rateableParticipants,
+      deliveredAt: DateTime.now(),
+      receiptImageUrl: null,
+    );
   }
 
   @override
@@ -624,8 +907,12 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       );
     }
 
+    final detailTitle =
+        _cachedDetailData?.lobby.restaurantName ?? 'Lobby Detail';
+
     return AppScaffold(
-      title: 'Lobby Detail',
+      title: detailTitle,
+      appBarBackgroundColor: const Color(0xFFF5F5FA),
       body: FutureBuilder<_LobbyDetailData>(
         future: detailFuture,
         initialData: _cachedDetailData,
@@ -645,12 +932,14 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
           final data = snapshot.data!;
           final lobby = data.lobby;
           final isMember = _isActiveMember(lobby, data.currentUser.id);
+          final hasKnownMembership =
+              _hasKnownMembership(lobby, data.currentUser.id);
           final canJoin = lobby.canJoin && !isMember && !data.isInActiveLobby;
           final showJoinAction = lobby.canJoin && !isMember;
           final joinDisabledReason = showJoinAction && data.isInActiveLobby
               ? 'Already in a lobby'
               : null;
-          final isHost = lobby.hostUserId == data.currentUser.id;
+          final isHost = isMember && lobby.hostUserId == data.currentUser.id;
           final visibleMembers = _visibleMembers(lobby);
           final canLeaveLobby =
               isMember && !isHost && lobby.orderStatus == LobbyStatus.waiting;
@@ -659,20 +948,33 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
           final canEditCart = isMember && lobby.canEditCart;
           final shouldShowLockCart =
               isHost && lobby.orderStatus == LobbyStatus.waiting;
-          final canKickMembers =
-              isHost &&
+          final canKickMembers = isHost &&
               (lobby.orderStatus == LobbyStatus.waiting ||
                   lobby.orderStatus == LobbyStatus.locked);
           final canTransferHost =
               isHost && lobby.orderStatus == LobbyStatus.waiting;
           final memberActionInProgress =
               _kickingUserId != null || _transferringHostUserId != null;
-          final canLockCart =
-              shouldShowLockCart &&
-              lobby.currentTotalAmount >= lobby.minimumOrderAmount;
-          final lockDisabledReason = shouldShowLockCart && !canLockCart
-              ? 'Minimum order amount has not been reached.'
+          final lockDisabledReason = shouldShowLockCart
+              ? _lockDisabledReason(
+                  lobby,
+                  data.currentHostHasPaymentInfo,
+                )
               : null;
+          final canLockCart = shouldShowLockCart && lockDisabledReason == null;
+          final knownMembers = _knownMembers(lobby);
+          final displayMembers =
+              visibleMembers.isEmpty ? knownMembers : visibleMembers;
+          final canViewMembers =
+              hasKnownMembership || visibleMembers.isNotEmpty;
+          final participantCount =
+              lobby.participantCount ?? visibleMembers.length;
+          final displayedActiveMemberCount =
+              displayMembers.where((member) => member.isActive).length;
+          final hiddenMemberCount =
+              participantCount > displayedActiveMemberCount
+                  ? participantCount - displayedActiveMemberCount
+                  : 0;
           final myPaymentRecord = _paymentRecordFor(
             lobby,
             data.currentUser.id,
@@ -684,185 +986,213 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
           );
           final statusAction = _statusActionFor(lobby);
 
-          return ListView(
-            key: PageStorageKey<String>('lobby-detail-${lobby.lobbyId}'),
-            padding: const EdgeInsets.all(16),
+          return Stack(
+            fit: StackFit.expand,
             children: [
-              if (isMember)
-                const _MyLobbyBanner(),
-              StatusCard(title: 'Restaurant', value: lobby.restaurantName),
-              StatusCard(
-                title: 'Host',
-                value: lobby.hostName ?? 'User ${lobby.hostUserId}',
-              ),
-              StatusCard(title: 'Delivery Zone', value: lobby.deliveryZone),
-              StatusCard(title: 'Status', value: lobby.orderStatus),
-              StatusCard(
-                title: 'Order Total',
-                value:
-                    '${lobby.currentTotalAmount} / ${lobby.minimumOrderAmount}',
-              ),
-              StatusCard(
-                title: 'Remaining Amount',
-                value: '${lobby.remainingAmount}',
-              ),
-              StatusCard(
-                title: 'Delivery Fee',
-                value: '${lobby.deliveryFee}',
-              ),
-              if (isMember && lobby.unreadCount > 0)
-                StatusCard(
-                  title: 'Unread Chat',
-                  value: '${lobby.unreadCount}',
-                ),
-              if (isMember) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => _openChat(lobby),
-                  icon: const Icon(Icons.chat_bubble_outline),
-                  label: Text(
-                    lobby.unreadCount > 0
-                        ? 'Open Chat (${lobby.unreadCount})'
-                        : 'Open Chat',
-                  ),
-                ),
-              ],
-              if (canLeaveLobby || canCancelLobby) ...[
-                const SizedBox(height: 8),
-                _ExitLobbyAction(
-                  label: canCancelLobby ? 'Cancel Lobby' : 'Leave Lobby',
-                  icon: canCancelLobby
-                      ? Icons.cancel_outlined
-                      : Icons.logout_outlined,
-                  isLoading: canCancelLobby
-                      ? _isCancelingLobby
-                      : _isLeavingLobby,
-                  onPressed: canCancelLobby
-                      ? () => _cancelLobby(lobby)
-                      : () => _leaveLobby(lobby),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                'Members',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              if (visibleMembers.isEmpty)
-                const _MutedText('No active members.')
-              else
-                for (final member in visibleMembers)
-                  _MemberRow(
-                    member: member,
-                    canKick: canKickMembers &&
-                        !member.isHost &&
-                        !memberActionInProgress,
-                    isKicking: _kickingUserId == member.userId,
-                    canTransferHost: canTransferHost &&
-                        !member.isHost &&
-                        !memberActionInProgress,
-                    isTransferringHost:
-                        _transferringHostUserId == member.userId,
-                    onKick: () => _kickMember(lobby, member),
-                    onTransferHost: () => _transferHost(lobby, member),
-                  ),
-              const SizedBox(height: 16),
-              _SectionHeader(
-                title: 'Cart Items',
-                action: canEditCart
-                    ? OutlinedButton.icon(
-                        onPressed: () => _addCartItem(lobby),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add item'),
-                      )
-                    : null,
-              ),
-              const SizedBox(height: 8),
-              if (lobby.cartItems.isEmpty)
-                const _MutedText('No cart items yet.')
-              else
-                for (final item in lobby.cartItems)
-                  CartItemTile(
-                    itemName: item.itemName,
-                    unitPrice: item.unitPrice,
-                    quantity: item.quantity,
-                    subtotal: item.subtotal,
-                    ownerName: _memberNameById(lobby, item.ownerUserId),
-                    canEdit:
-                        canEditCart && item.isOwnedBy(data.currentUser.id),
-                    onEdit: () => _editCartItem(lobby, item),
-                    onDelete: () => _deleteCartItem(lobby, item),
-                  ),
-              if (isMember && !lobby.canEditCart) ...[
-                const SizedBox(height: 8),
-                const _MutedText('Cart editing is unavailable after lock.'),
-              ],
-              if (shouldShowLockCart) ...[
-                const SizedBox(height: 16),
-                _LockCartAction(
-                  canLock: canLockCart,
-                  disabledReason: lockDisabledReason,
-                  isLoading: _isLockingCart,
-                  onLock: () => _lockCart(lobby),
-                ),
-              ],
-              const SizedBox(height: 16),
-              _SectionHeader(title: isHost ? 'Payment Records' : 'My Payment'),
-              const SizedBox(height: 8),
-              if (lobby.paymentRecords.isEmpty)
-                const _MutedText('Payment records will appear after cart lock.')
-              else if (isHost) ...[
-                for (final record in lobby.paymentRecords)
-                  PaymentRecordTile(
-                    userName: _memberNameById(lobby, record.userId),
-                    amount: record.amount,
-                    status: record.status,
-                    canConfirm: isHost &&
-                        lobby.orderStatus == LobbyStatus.locked &&
-                        !record.isPaid &&
-                        _confirmingPaymentRecordId == null,
-                    onConfirm: () => _confirmPaymentRecord(
-                      lobby,
-                      record.paymentRecordId,
+              DecoratedBox(
+                decoration: const BoxDecoration(color: Color(0xFFF5F5FA)),
+                child: ListView(
+                  key: PageStorageKey<String>('lobby-detail-${lobby.lobbyId}'),
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, isMember ? 104 : 24),
+                  children: [
+                    if (isMember) const _MyLobbyBanner(),
+                    if (hasKnownMembership && !isMember)
+                      const _PastLobbyBanner(),
+                    _LobbyStatusCard(status: lobby.orderStatus),
+                    const SizedBox(height: 8),
+                    _LobbyOverviewPanel(
+                      restaurantName: lobby.restaurantName,
+                      deliveryZone: lobby.deliveryZone,
+                      deliveryFee: lobby.deliveryFee,
+                      currentTotalAmount: lobby.currentTotalAmount,
+                      minimumOrderAmount: lobby.minimumOrderAmount,
                     ),
-                  ),
-              ]
-              else if (myPaymentRecord == null)
-                const _MutedText('My payment record is not available.')
-              else
-                PaymentRecordTile(
-                  userName: _memberNameById(lobby, myPaymentRecord.userId),
-                  amount: myPaymentRecord.amount,
-                  status: myPaymentRecord.status,
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _CompactPanel(
+                            title: _memberCountTitle(participantCount),
+                            children: [
+                              if (!canViewMembers)
+                                const _CompactMutedText(
+                                  'Member list is unavailable.',
+                                )
+                              else if (displayMembers.isEmpty)
+                                const _CompactMutedText(
+                                  'Member list is unavailable.',
+                                )
+                              else ...[
+                                if (visibleMembers.isEmpty)
+                                  const _CompactMutedText(
+                                    'Active member list is unavailable.',
+                                  ),
+                                for (final member in displayMembers)
+                                  _CompactMemberRow(
+                                    member: member,
+                                    canKick: canKickMembers &&
+                                        !member.isHost &&
+                                        member.isActive &&
+                                        !memberActionInProgress,
+                                    isKicking: _kickingUserId == member.userId,
+                                    canTransferHost: canTransferHost &&
+                                        !member.isHost &&
+                                        member.isActive &&
+                                        !memberActionInProgress,
+                                    isTransferringHost:
+                                        _transferringHostUserId ==
+                                            member.userId,
+                                    onViewProfile: () => _showMemberProfile(
+                                      lobby,
+                                      member,
+                                      data.currentUser,
+                                    ),
+                                    onKick: () => _kickMember(lobby, member),
+                                    onTransferHost: () =>
+                                        _transferHost(lobby, member),
+                                  ),
+                                if (hiddenMemberCount > 0)
+                                  _CompactMutedText(
+                                    '$hiddenMemberCount hidden by API.',
+                                  ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _CompactPanel(
+                            title: 'Cart Items',
+                            action: canEditCart
+                                ? _AddItemIconButton(
+                                    onPressed: () => _addCartItem(lobby),
+                                  )
+                                : null,
+                            children: [
+                              if (lobby.cartItems.isEmpty)
+                                const _CompactMutedText('No cart items yet.')
+                              else
+                                for (final item in lobby.cartItems)
+                                  _CompactCartItemRow(
+                                    itemName: item.itemName,
+                                    unitPrice: item.unitPrice,
+                                    quantity: item.quantity,
+                                    subtotal: item.subtotal,
+                                    ownerName: _memberNameById(
+                                      lobby,
+                                      item.ownerUserId,
+                                    ),
+                                    canEdit: canEditCart &&
+                                        item.isOwnedBy(data.currentUser.id),
+                                    onEdit: () => _editCartItem(lobby, item),
+                                    onDelete: () =>
+                                        _deleteCartItem(lobby, item),
+                                  ),
+                              if (isMember && !lobby.canEditCart)
+                                const _CompactMutedText(
+                                  'Editing is unavailable after lock.',
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (shouldShowLockCart) ...[
+                      const SizedBox(height: 16),
+                      _LockCartAction(
+                        canLock: canLockCart,
+                        disabledReason: lockDisabledReason,
+                        isLoading: _isLockingCart,
+                        onLock: () => _lockCart(lobby),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    _SectionHeader(
+                      title: isHost ? 'Payment Records' : 'My Payment',
+                    ),
+                    const SizedBox(height: 8),
+                    if (lobby.paymentRecords.isEmpty)
+                      const _MutedText(
+                        'Payment records will appear after cart lock.',
+                      )
+                    else if (isHost) ...[
+                      for (final record in lobby.paymentRecords)
+                        PaymentRecordTile(
+                          userName: _memberNameById(lobby, record.userId),
+                          amount: record.amount,
+                          status: record.status,
+                          canConfirm: isHost &&
+                              lobby.orderStatus == LobbyStatus.locked &&
+                              !record.isPaid &&
+                              _confirmingPaymentRecordId == null,
+                          onConfirm: () => _confirmPaymentRecord(
+                            lobby,
+                            record.paymentRecordId,
+                          ),
+                        ),
+                    ] else if (myPaymentRecord == null)
+                      const _MutedText('My payment record is not available.')
+                    else
+                      PaymentRecordTile(
+                        userName:
+                            _memberNameById(lobby, myPaymentRecord.userId),
+                        amount: myPaymentRecord.amount,
+                        status: myPaymentRecord.status,
+                      ),
+                    if (shouldShowTransferInfo) ...[
+                      const SizedBox(height: 12),
+                      _HostPaymentInfoPanel(
+                        lobby: lobby,
+                        onCopyAccountNumber: () =>
+                            _copyHostAccountNumber(lobby),
+                      ),
+                    ],
+                    if (isHost && statusAction != null) ...[
+                      const SizedBox(height: 16),
+                      _LobbyStatusAction(
+                        action: statusAction,
+                        isLoading: _isUpdatingStatus,
+                        onPressed: () => _updateLobbyStatus(
+                          lobby,
+                          statusAction.nextStatus,
+                        ),
+                      ),
+                    ],
+                    if (showJoinAction) ...[
+                      const SizedBox(height: 16),
+                      _JoinLobbyAction(
+                        canJoin: canJoin,
+                        disabledReason: joinDisabledReason,
+                        isLoading: _isJoining,
+                        onJoin: () => _joinLobby(lobby),
+                      ),
+                    ],
+                    if (canLeaveLobby || canCancelLobby) ...[
+                      const SizedBox(height: 16),
+                      _ExitLobbyAction(
+                        label: canCancelLobby ? 'Cancel Lobby' : 'Leave Lobby',
+                        icon: canCancelLobby
+                            ? Icons.cancel_outlined
+                            : Icons.logout_outlined,
+                        isLoading: canCancelLobby
+                            ? _isCancelingLobby
+                            : _isLeavingLobby,
+                        onPressed: canCancelLobby
+                            ? () => _cancelLobby(lobby)
+                            : () => _leaveLobby(lobby),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                  ],
                 ),
-              if (shouldShowTransferInfo) ...[
-                const SizedBox(height: 12),
-                _HostPaymentInfoPanel(
-                  lobby: lobby,
-                  onCopyAccountNumber: () => _copyHostAccountNumber(lobby),
+              ),
+              if (isMember)
+                Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: _OpenChatFab(onPressed: () => _openChat(lobby)),
                 ),
-              ],
-              if (isHost && statusAction != null) ...[
-                const SizedBox(height: 16),
-                _LobbyStatusAction(
-                  action: statusAction,
-                  isLoading: _isUpdatingStatus,
-                  onPressed: () => _updateLobbyStatus(
-                    lobby,
-                    statusAction.nextStatus,
-                  ),
-                ),
-              ],
-              if (showJoinAction) ...[
-                const SizedBox(height: 16),
-                _JoinLobbyAction(
-                  canJoin: canJoin,
-                  disabledReason: joinDisabledReason,
-                  isLoading: _isJoining,
-                  onJoin: () => _joinLobby(lobby),
-                ),
-              ],
-              const SizedBox(height: 24),
             ],
           );
         },
@@ -876,6 +1206,14 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
     );
   }
 
+  bool _hasKnownMembership(Lobby lobby, int currentUserId) {
+    return lobby.members.any((member) => member.userId == currentUserId);
+  }
+
+  String _memberCountTitle(int count) {
+    return count == 1 ? '1 member' : '$count members';
+  }
+
   List<LobbyMember> _visibleMembers(Lobby lobby) {
     // LEFT/KICKED member는 서버 기록으로는 남을 수 있지만, 화면에는 현재 참여자만 보여줍니다.
     final members = lobby.members.where((member) => member.isActive).toList();
@@ -884,6 +1222,29 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       final secondIsHost = second.isHost || second.userId == lobby.hostUserId;
       if (firstIsHost != secondIsHost) {
         return firstIsHost ? -1 : 1;
+      }
+
+      final nameCompare = first.name.toLowerCase().compareTo(
+            second.name.toLowerCase(),
+          );
+      if (nameCompare != 0) {
+        return nameCompare;
+      }
+      return first.userId.compareTo(second.userId);
+    });
+    return members;
+  }
+
+  List<LobbyMember> _knownMembers(Lobby lobby) {
+    final members = lobby.members.toList();
+    members.sort((first, second) {
+      final firstIsHost = first.isHost || first.userId == lobby.hostUserId;
+      final secondIsHost = second.isHost || second.userId == lobby.hostUserId;
+      if (firstIsHost != secondIsHost) {
+        return firstIsHost ? -1 : 1;
+      }
+      if (first.isActive != second.isActive) {
+        return first.isActive ? -1 : 1;
       }
 
       final nameCompare = first.name.toLowerCase().compareTo(
@@ -917,6 +1278,19 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       if (record.userId == userId) {
         return record;
       }
+    }
+    return null;
+  }
+
+  String? _lockDisabledReason(
+    Lobby lobby,
+    bool? currentHostHasPaymentInfo,
+  ) {
+    if (currentHostHasPaymentInfo == false) {
+      return 'Payment info is required before locking the cart.';
+    }
+    if (lobby.currentTotalAmount < lobby.minimumOrderAmount) {
+      return 'Minimum order amount has not been reached.';
     }
     return null;
   }
@@ -977,11 +1351,13 @@ class _LobbyDetailData {
     required this.lobby,
     required this.currentUser,
     required this.isInActiveLobby,
+    required this.currentHostHasPaymentInfo,
   });
 
   final Lobby lobby;
   final User currentUser;
   final bool isInActiveLobby;
+  final bool? currentHostHasPaymentInfo;
 }
 
 class _MyLobbyBanner extends StatelessWidget {
@@ -991,22 +1367,24 @@ class _MyLobbyBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
           Icon(
             Icons.check_circle_outline,
-            color: Theme.of(context).colorScheme.onPrimaryContainer,
+            size: 18,
+            color: const Color(0xFF0054FF),
           ),
           const SizedBox(width: 8),
           Text(
             'My Lobby',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  color: const Color(0xFF0054FF),
+                  fontWeight: FontWeight.w700,
                 ),
           ),
         ],
@@ -1015,27 +1393,639 @@ class _MyLobbyBanner extends StatelessWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
+class _PastLobbyBanner extends StatelessWidget {
+  const _PastLobbyBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.history_outlined,
+            size: 18,
+            color: colorScheme.outline,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Past Lobby',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: colorScheme.outline,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LobbyStatusCard extends StatelessWidget {
+  const _LobbyStatusCard({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.radio_button_checked,
+            size: 18,
+            color: Color(0xFF0054FF),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Status',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          _BluePill(label: status),
+        ],
+      ),
+    );
+  }
+}
+
+class _LobbyOverviewPanel extends StatelessWidget {
+  const _LobbyOverviewPanel({
+    required this.restaurantName,
+    required this.deliveryZone,
+    required this.deliveryFee,
+    required this.currentTotalAmount,
+    required this.minimumOrderAmount,
+  });
+
+  final String restaurantName;
+  final String deliveryZone;
+  final int deliveryFee;
+  final int currentTotalAmount;
+  final int minimumOrderAmount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _OrderProgressCard(
+          currentTotalAmount: currentTotalAmount,
+          minimumOrderAmount: minimumOrderAmount,
+        ),
+        const SizedBox(height: 8),
+        _LobbyInfoCard(
+          restaurantName: restaurantName,
+          deliveryZone: deliveryZone,
+          deliveryFee: deliveryFee,
+        ),
+      ],
+    );
+  }
+}
+
+class _LobbyInfoCard extends StatelessWidget {
+  const _LobbyInfoCard({
+    required this.restaurantName,
+    required this.deliveryZone,
+    required this.deliveryFee,
+  });
+
+  final String restaurantName;
+  final String deliveryZone;
+  final int deliveryFee;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CompactInfoLine(label: 'Restaurant', value: restaurantName),
+          const SizedBox(height: 10),
+          _CompactInfoLine(label: 'Delivery Zone', value: deliveryZone),
+          const SizedBox(height: 10),
+          _CompactInfoLine(label: 'Delivery Fee', value: '$deliveryFee'),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactInfoLine extends StatelessWidget {
+  const _CompactInfoLine({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.labelSmall?.copyWith(
+              color: colorScheme.outline,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 2,
+          child: Text(
+            value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.end,
+            style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OrderProgressCard extends StatelessWidget {
+  const _OrderProgressCard({
+    required this.currentTotalAmount,
+    required this.minimumOrderAmount,
+  });
+
+  final int currentTotalAmount;
+  final int minimumOrderAmount;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final progress = minimumOrderAmount <= 0
+        ? 0.0
+        : (currentTotalAmount / minimumOrderAmount).clamp(0.0, 1.0).toDouble();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Order Total',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colorScheme.outline,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+              Text(
+                '$currentTotalAmount / $minimumOrderAmount',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: const Color(0xFFDDE7FF),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                Color(0xFF0054FF),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactPanel extends StatelessWidget {
+  const _CompactPanel({
     required this.title,
+    required this.children,
     this.action,
   });
 
   final String title;
+  final List<Widget> children;
   final Widget? action;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
         ),
-        if (action != null) action!,
-      ],
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              if (action != null) action!,
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _AddItemIconButton extends StatelessWidget {
+  const _AddItemIconButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Add item',
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        backgroundColor: const Color(0xFFF7F9FF),
+        foregroundColor: const Color(0xFF0054FF),
+        fixedSize: const Size.square(32),
+        padding: EdgeInsets.zero,
+      ),
+      icon: const Icon(Icons.add, size: 18),
+    );
+  }
+}
+
+class _CompactMemberRow extends StatelessWidget {
+  const _CompactMemberRow({
+    required this.member,
+    required this.canKick,
+    required this.isKicking,
+    required this.canTransferHost,
+    required this.isTransferringHost,
+    required this.onViewProfile,
+    required this.onKick,
+    required this.onTransferHost,
+  });
+
+  final LobbyMember member;
+  final bool canKick;
+  final bool isKicking;
+  final bool canTransferHost;
+  final bool isTransferringHost;
+  final VoidCallback onViewProfile;
+  final VoidCallback onKick;
+  final VoidCallback onTransferHost;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final trustScoreText = member.trustScore?.toStringAsFixed(1);
+    final isProcessing = isKicking || isTransferringHost;
+    final hasHostAction = canTransferHost || canKick;
+
+    return InkWell(
+      onTap: onViewProfile,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F9FF),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  member.isHost ? Icons.star_outline : Icons.person_outline,
+                  size: 17,
+                  color: const Color(0xFF0054FF),
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    member.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                ),
+                if (isProcessing)
+                  const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else if (hasHostAction)
+                  PopupMenuButton<_MemberAction>(
+                    tooltip: 'Member actions',
+                    padding: EdgeInsets.zero,
+                    onSelected: (action) {
+                      if (action == _MemberAction.transferHost) {
+                        onTransferHost();
+                      } else {
+                        onKick();
+                      }
+                    },
+                    itemBuilder: (context) {
+                      return [
+                        if (canTransferHost)
+                          const PopupMenuItem<_MemberAction>(
+                            value: _MemberAction.transferHost,
+                            child: Text('Transfer Host'),
+                          ),
+                        if (canKick)
+                          const PopupMenuItem<_MemberAction>(
+                            value: _MemberAction.kick,
+                            child: Text('Kick'),
+                          ),
+                      ];
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              trustScoreText == null
+                  ? member.roleInLobby
+                  : '${member.roleInLobby} · $trustScoreText',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colorScheme.outline,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactCartItemRow extends StatelessWidget {
+  const _CompactCartItemRow({
+    required this.itemName,
+    required this.unitPrice,
+    required this.quantity,
+    required this.subtotal,
+    this.ownerName,
+    this.canEdit = false,
+    this.onEdit,
+    this.onDelete,
+  });
+
+  final String itemName;
+  final int unitPrice;
+  final int quantity;
+  final int subtotal;
+  final String? ownerName;
+  final bool canEdit;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FF),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  itemName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              if (canEdit)
+                PopupMenuButton<_CartItemAction>(
+                  tooltip: 'Cart item actions',
+                  padding: EdgeInsets.zero,
+                  onSelected: (action) {
+                    if (action == _CartItemAction.edit) {
+                      onEdit?.call();
+                    } else {
+                      onDelete?.call();
+                    }
+                  },
+                  itemBuilder: (context) {
+                    return const [
+                      PopupMenuItem<_CartItemAction>(
+                        value: _CartItemAction.edit,
+                        child: Text('Edit'),
+                      ),
+                      PopupMenuItem<_CartItemAction>(
+                        value: _CartItemAction.delete,
+                        child: Text('Delete'),
+                      ),
+                    ];
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            [
+              '$unitPrice x $quantity',
+              if (ownerName != null) ownerName!,
+            ].join(' - '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colorScheme.outline,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$subtotal',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: const Color(0xFF0054FF),
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactMutedText extends StatelessWidget {
+  const _CompactMutedText(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+      ),
+    );
+  }
+}
+
+class _BluePill extends StatelessWidget {
+  const _BluePill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: const Color(0xFF0054FF),
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OpenChatFab extends StatelessWidget {
+  const _OpenChatFab({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0054FF).withValues(alpha: 0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: FloatingActionButton.extended(
+        heroTag: 'open-chat-fab',
+        onPressed: onPressed,
+        backgroundColor: const Color(0xFF0054FF),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        icon: const Icon(Icons.chat_bubble_outline),
+        label: const Text('Open Chat'),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+  });
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0,
+          ),
     );
   }
 }
@@ -1070,12 +2060,15 @@ class _HostPaymentInfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (!lobby.hasHostPaymentInfo) {
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
-          borderRadius: BorderRadius.circular(8),
+          color: colorScheme.surface,
+          border: Border.all(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: const Row(
           children: [
@@ -1092,8 +2085,9 @@ class _HostPaymentInfoPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outline),
-        borderRadius: BorderRadius.circular(8),
+        color: colorScheme.surface,
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1175,13 +2169,12 @@ class _ExitLobbyAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return OutlinedButton.icon(
       onPressed: isLoading ? null : onPressed,
       style: OutlinedButton.styleFrom(
-        foregroundColor: colorScheme.error,
-        side: BorderSide(color: colorScheme.error),
+        foregroundColor: const Color(0xFF111111),
+        backgroundColor: const Color(0xFFF2F2F2),
+        side: const BorderSide(color: Color(0xFF111111)),
       ),
       icon: isLoading
           ? const SizedBox.square(
@@ -1263,6 +2256,7 @@ class _LobbyStatusAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveOnPressed = action.enabled && !isLoading ? onPressed : null;
+    final colorScheme = Theme.of(context).colorScheme;
     final child = isLoading
         ? const SizedBox.square(
             dimension: 18,
@@ -1273,10 +2267,24 @@ class _LobbyStatusAction extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FilledButton.icon(
-          onPressed: effectiveOnPressed,
-          icon: Icon(action.icon),
-          label: child,
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: effectiveOnPressed == null
+                ? null
+                : [
+                    BoxShadow(
+                      color: colorScheme.primary.withValues(alpha: 0.12),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+          ),
+          child: FilledButton.icon(
+            onPressed: effectiveOnPressed,
+            icon: Icon(action.icon),
+            label: child,
+          ),
         ),
         if (!action.enabled && action.disabledReason != null) ...[
           const SizedBox(height: 6),
@@ -1343,82 +2351,132 @@ class _JoinLobbyAction extends StatelessWidget {
   }
 }
 
-class _MemberRow extends StatelessWidget {
-  const _MemberRow({
-    required this.member,
-    required this.canKick,
-    required this.isKicking,
-    required this.canTransferHost,
-    required this.isTransferringHost,
-    required this.onKick,
-    required this.onTransferHost,
-  });
-
-  final LobbyMember member;
-  final bool canKick;
-  final bool isKicking;
-  final bool canTransferHost;
-  final bool isTransferringHost;
-  final VoidCallback onKick;
-  final VoidCallback onTransferHost;
-
-  @override
-  Widget build(BuildContext context) {
-    final statusText = member.isActive
-        ? member.membershipStatus
-        : '${member.membershipStatus} member';
-    final isProcessing = isKicking || isTransferringHost;
-    final hasHostAction = canTransferHost || canKick;
-
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(member.isHost ? Icons.star_outline : Icons.person_outline),
-      title: Text(member.name),
-      subtitle: Text(member.roleInLobby),
-      trailing: isProcessing
-          ? const SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : hasHostAction
-              ? PopupMenuButton<_MemberAction>(
-                  tooltip: 'Member actions',
-                  onSelected: (action) {
-                    if (action == _MemberAction.transferHost) {
-                      onTransferHost();
-                    } else {
-                      onKick();
-                    }
-                  },
-                  itemBuilder: (context) {
-                    return [
-                      if (canTransferHost)
-                        const PopupMenuItem<_MemberAction>(
-                          value: _MemberAction.transferHost,
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.switch_account_outlined),
-                            title: Text('Transfer Host'),
-                          ),
-                        ),
-                      if (canKick)
-                        const PopupMenuItem<_MemberAction>(
-                          value: _MemberAction.kick,
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.person_remove_outlined),
-                            title: Text('Kick'),
-                          ),
-                        ),
-                    ];
-                  },
-                )
-              : Text(statusText),
-    );
-  }
-}
-
 enum _MemberAction {
   transferHost,
   kick,
+}
+
+enum _CartItemAction {
+  edit,
+  delete,
+}
+
+class _MemberProfileSheet extends StatelessWidget {
+  const _MemberProfileSheet({
+    required this.member,
+    this.trustScore,
+  });
+
+  final LobbyMember member;
+  final double? trustScore;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  child: Icon(
+                    member.isHost ? Icons.star_outline : Icons.person_outline,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        member.name,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        member.isHost ? 'Host' : 'Participant',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colorScheme.outline,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _MemberProfileRow(label: 'User ID', value: '${member.userId}'),
+            _MemberProfileRow(
+              label: 'Trust Score',
+              value:
+                  trustScore == null ? 'Unavailable' : _formatRate(trustScore!),
+            ),
+            _MemberProfileRow(label: 'Role', value: member.roleInLobby),
+            _MemberProfileRow(label: 'Status', value: member.membershipStatus),
+            _MemberProfileRow(
+              label: 'Joined',
+              value: _formatDateTime(member.joinedAt),
+            ),
+            if (member.leftAt != null)
+              _MemberProfileRow(
+                label: 'Left',
+                value: _formatDateTime(member.leftAt),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDateTime(DateTime? value) {
+    if (value == null) {
+      return 'Unknown';
+    }
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '${value.year}-$month-$day $hour:$minute';
+  }
+
+  String _formatRate(double value) {
+    return '${value.toStringAsFixed(1)} / 5.0';
+  }
+}
+
+class _MemberProfileRow extends StatelessWidget {
+  const _MemberProfileRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 76,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
 }

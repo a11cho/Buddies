@@ -48,6 +48,37 @@ class OrderHistoryItem {
   final List<OrderHistoryParticipant> participants;
   final List<OrderHistoryParticipant> rateableParticipants;
 
+  OrderHistoryItem copyWith({
+    int? lobbyId,
+    int? currentUserId,
+    String? restaurantName,
+    DateTime? deliveredAt,
+    String? hostName,
+    int? participantCount,
+    int? totalAmount,
+    int? myAmount,
+    String? receiptImageUrl,
+    bool? canRate,
+    List<OrderHistoryParticipant>? participants,
+    List<OrderHistoryParticipant>? rateableParticipants,
+  }) {
+    return OrderHistoryItem(
+      lobbyId: lobbyId ?? this.lobbyId,
+      currentUserId: currentUserId ?? this.currentUserId,
+      restaurantName: restaurantName ?? this.restaurantName,
+      deliveredAt: deliveredAt ?? this.deliveredAt,
+      hostName: hostName ?? this.hostName,
+      participantCount: participantCount ?? this.participantCount,
+      totalAmount: totalAmount ?? this.totalAmount,
+      myAmount: myAmount ?? this.myAmount,
+      receiptImageUrl: receiptImageUrl ?? this.receiptImageUrl,
+      canRate: canRate ?? this.canRate,
+      participants: participants ?? this.participants,
+      rateableParticipants:
+          rateableParticipants ?? this.rateableParticipants,
+    );
+  }
+
   factory OrderHistoryItem.fromJson(
     Map<String, dynamic> json, {
     required int currentUserId,

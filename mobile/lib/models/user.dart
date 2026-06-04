@@ -50,8 +50,20 @@ class User {
       name: json['name'] as String? ?? '',
       role: json['role'] as String? ?? '',
       profileImageUrl: json['profileImageUrl'] as String?,
-      trustScore: parseJsonDouble(json['trustScore'], 'trustScore'),
+      trustScore: _parseTrustScore(json),
       status: json['status'] as String? ?? UserStatus.active,
+    );
+  }
+
+  static double _parseTrustScore(Map<String, dynamic> json) {
+    return parseJsonDouble(
+      json['trustScore'] ??
+          json['rate'] ??
+          json['rating'] ??
+          json['averageRating'] ??
+          json['trust_score'] ??
+          0,
+      'trustScore',
     );
   }
 

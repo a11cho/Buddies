@@ -7,6 +7,9 @@ class AppScaffold extends StatelessWidget {
     required this.title,
     required this.body,
     this.actions,
+    this.titleWidget,
+    this.centerTitle,
+    this.appBarBackgroundColor,
     this.floatingActionButton,
     this.bottomNavigationBar,
     super.key,
@@ -15,6 +18,9 @@ class AppScaffold extends StatelessWidget {
   final String title;
   final Widget body;
   final List<Widget>? actions;
+  final Widget? titleWidget;
+  final bool? centerTitle;
+  final Color? appBarBackgroundColor;
   final Widget? floatingActionButton;
   final Widget? bottomNavigationBar;
 
@@ -22,8 +28,13 @@ class AppScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: titleWidget ?? Text(title),
         actions: actions,
+        centerTitle: centerTitle,
+        backgroundColor: appBarBackgroundColor,
+        surfaceTintColor:
+            appBarBackgroundColor == null ? null : Colors.transparent,
+        scrolledUnderElevation: appBarBackgroundColor == null ? null : 0,
       ),
       body: SafeArea(child: body),
       floatingActionButton: floatingActionButton,

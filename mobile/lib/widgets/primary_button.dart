@@ -21,6 +21,7 @@ class PrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveOnPressed = isLoading ? null : onPressed;
+    final colorScheme = Theme.of(context).colorScheme;
     final child = isLoading
         ? const SizedBox.square(
             dimension: 18,
@@ -39,13 +40,29 @@ class PrimaryButton extends StatelessWidget {
             label: child,
           );
 
+    final decoratedButton = Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: effectiveOnPressed == null
+            ? null
+            : [
+                BoxShadow(
+                  color: colorScheme.primary.withValues(alpha: 0.12),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+      ),
+      child: button,
+    );
+
     if (!fullWidth) {
-      return button;
+      return decoratedButton;
     }
 
     return SizedBox(
       width: double.infinity,
-      child: button,
+      child: decoratedButton,
     );
   }
 }
