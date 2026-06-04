@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../core/enums.dart';
 import 'json_parsing.dart';
 
@@ -91,6 +93,13 @@ class ChatMessage {
   }
 
   static Map<String, Object?> _parseEventMetadata(Object? value) {
+    if (value is String) {
+      try {
+        return _parseEventMetadata(jsonDecode(value));
+      } on FormatException {
+        return const {};
+      }
+    }
     if (value is Map<String, dynamic>) {
       return Map<String, Object?>.from(value);
     }

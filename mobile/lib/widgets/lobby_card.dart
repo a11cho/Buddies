@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 // Lobby 목록에서 Lobby 하나를 보여주는 카드입니다.
-// unreadCount는 사용자가 참여 중인 Lobby의 안 읽은 채팅 수 badge에 사용합니다.
 class LobbyCard extends StatelessWidget {
   const LobbyCard({
     required this.restaurantName,
@@ -11,7 +10,6 @@ class LobbyCard extends StatelessWidget {
     required this.remainingAmount,
     required this.participantCount,
     required this.orderStatus,
-    this.unreadCount = 0,
     this.isMyLobby = false,
     this.onTap,
     this.onJoin,
@@ -28,7 +26,6 @@ class LobbyCard extends StatelessWidget {
   final int remainingAmount;
   final int participantCount;
   final String orderStatus;
-  final int unreadCount;
   final bool isMyLobby;
   final VoidCallback? onTap;
   final VoidCallback? onJoin;
@@ -38,90 +35,172 @@ class LobbyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     final progress = minimumOrderAmount <= 0
         ? 0.0
         : (currentTotalAmount / minimumOrderAmount).clamp(0.0, 1.0).toDouble();
 
-    return Card(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0054FF).withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      restaurantName,
-                      style: Theme.of(context).textTheme.titleMedium,
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEEEEE),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.receipt_long_outlined,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  if (unreadCount > 0) ...[
-                    _UnreadBadge(count: unreadCount),
-                    const SizedBox(width: 8),
-                  ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          restaurantName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          deliveryZone,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.outline,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   _StatusBadge(label: orderStatus),
                 ],
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
+              const SizedBox(height: 12),
+              Row(
                 children: [
-                  if (isMyLobby)
+                  if (isMyLobby) ...[
                     const _MyLobbyBadge(),
-                  _InfoLabel(icon: Icons.place_outlined, label: deliveryZone),
+                    const SizedBox(width: 8),
+                  ],
                   _InfoLabel(
                     icon: Icons.group_outlined,
-                    label: '$participantCount members',
+                    label: '$participantCount',
+                  ),
+                  const Spacer(),
+                  Text(
+                    '$currentTotalAmount / $minimumOrderAmount',
+                    style: textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              LinearProgressIndicator(value: progress),
               const SizedBox(height: 8),
-              Text(
-                '$currentTotalAmount / $minimumOrderAmount',
-                style: Theme.of(context).textTheme.bodyMedium,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 5,
+                  backgroundColor: const Color(0xFFDDE7FF),
+                  valueColor:
+                      const AlwaysStoppedAnimation<Color>(Color(0xFF0054FF)),
+                ),
               ),
+              const SizedBox(height: 6),
               Text(
-                'Remaining $remainingAmount',
-                style: Theme.of(context).textTheme.bodySmall,
+                remainingAmount <= 0
+                    ? 'Minimum reached'
+                    : 'Remaining $remainingAmount',
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.outline,
+                ),
               ),
               if (showJoinAction) ...[
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Tooltip(
-                    message: joinDisabledReason ?? 'Join this lobby',
-                    child: Opacity(
-                      opacity: canJoin ? 1 : 0.55,
-                      child: OutlinedButton.icon(
-                        onPressed: canJoin ? onJoin : null,
-                        icon: Icon(
-                          canJoin ? Icons.login : Icons.block,
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    if (!canJoin && joinDisabledReason != null)
+                      Expanded(
+                        child: Text(
+                          joinDisabledReason!,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.outline,
+                          ),
                         ),
-                        label: Text(canJoin ? 'Join' : 'Unavailable'),
+                      )
+                    else
+                      const Spacer(),
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: canJoin
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFF0054FF)
+                                      .withValues(alpha: 0.1),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Tooltip(
+                        message: joinDisabledReason ?? 'Join this lobby',
+                        child: FilledButton.tonalIcon(
+                          onPressed: canJoin ? onJoin : null,
+                          style: FilledButton.styleFrom(
+                            backgroundColor:
+                                canJoin ? const Color(0xFF0054FF) : null,
+                            foregroundColor: canJoin ? Colors.white : null,
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
+                          icon: Icon(
+                            canJoin ? Icons.login : Icons.block,
+                            size: 18,
+                          ),
+                          label: Text(canJoin ? 'Join' : 'Locked'),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-                if (!canJoin && joinDisabledReason != null) ...[
-                  const SizedBox(height: 4),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      joinDisabledReason!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                    ),
-                  ),
-                ],
               ],
             ],
           ),
@@ -138,7 +217,7 @@ class _MyLobbyBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
+        color: const Color(0xFFEAF1FF),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
@@ -149,39 +228,17 @@ class _MyLobbyBadge extends StatelessWidget {
             Icon(
               Icons.check_circle_outline,
               size: 16,
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
+              color: const Color(0xFF0054FF),
             ),
             const SizedBox(width: 4),
             Text(
               'My Lobby',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    color: const Color(0xFF0054FF),
+                    fontWeight: FontWeight.w700,
                   ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _UnreadBadge extends StatelessWidget {
-  const _UnreadBadge({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Text(
-          count > 99 ? '99+' : '$count',
-          style: Theme.of(context).textTheme.labelSmall,
         ),
       ),
     );
@@ -199,12 +256,19 @@ class _InfoLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16),
+        Icon(icon, size: 15, color: colorScheme.outline),
         const SizedBox(width: 4),
-        Text(label),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.outline,
+              ),
+        ),
       ],
     );
   }
@@ -219,14 +283,17 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFFEAF1FF),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Text(
           label,
-          style: Theme.of(context).textTheme.labelSmall,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: const Color(0xFF0054FF),
+                fontWeight: FontWeight.w700,
+              ),
         ),
       ),
     );

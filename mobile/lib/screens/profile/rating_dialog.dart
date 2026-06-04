@@ -18,27 +18,34 @@ class RatingDialog extends StatefulWidget {
 }
 
 class _RatingDialogState extends State<RatingDialog> {
-  final TextEditingController _feedbackController = TextEditingController();
-  int? _targetUserId;
-  int _rating = 5;
+  final Map<int, TextEditingController> _feedbackControllers = {};
+  final Map<int, int> _ratingsByUserId = {};
+  final Set<int> _selectedUserIds = {};
   bool _isSubmitting = false;
 
   List<OrderHistoryParticipant> get _targets {
-    return widget.historyItem.rateableParticipants;
+    final byUserId = <int, OrderHistoryParticipant>{};
+    for (final participant in widget.historyItem.rateableParticipants) {
+      byUserId.putIfAbsent(participant.userId, () => participant);
+    }
+    return byUserId.values.toList();
   }
 
   @override
   void initState() {
     super.initState();
-    final targets = _targets;
-    if (targets.isNotEmpty) {
-      _targetUserId = targets.first.userId;
+    for (final target in _targets) {
+      _selectedUserIds.add(target.userId);
+      _ratingsByUserId[target.userId] = 5;
+      _feedbackControllers[target.userId] = TextEditingController();
     }
   }
 
   @override
   void dispose() {
-    _feedbackController.dispose();
+    for (final controller in _feedbackControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -46,64 +53,43 @@ class _RatingDialogState extends State<RatingDialog> {
   Widget build(BuildContext context) {
     final targets = _targets;
     return AlertDialog(
-      title: const Text('Rate user'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<int>(
-              initialValue: _targetUserId,
-              decoration: const InputDecoration(
-                labelText: 'Target user',
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                for (final target in targets)
-                  DropdownMenuItem<int>(
-                    value: target.userId,
-                    child: Text(target.name),
+      title: const Text('Rate members'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (targets.isEmpty)
+                const Text('No members are available to rate.')
+              else
+                for (final target in targets) ...[
+                  _TargetRatingEditor(
+                    target: target,
+                    isSelected: _selectedUserIds.contains(target.userId),
+                    rating: _ratingsByUserId[target.userId] ?? 5,
+                    feedbackController: _feedbackControllers[target.userId]!,
+                    isEnabled: !_isSubmitting,
+                    onSelectedChanged: (isSelected) {
+                      setState(() {
+                        if (isSelected) {
+                          _selectedUserIds.add(target.userId);
+                        } else {
+                          _selectedUserIds.remove(target.userId);
+                        }
+                      });
+                    },
+                    onRatingChanged: (rating) {
+                      setState(() {
+                        _ratingsByUserId[target.userId] = rating;
+                        _selectedUserIds.add(target.userId);
+                      });
+                    },
                   ),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _targetUserId = value;
-                });
-              },
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<int>(
-              initialValue: _rating,
-              decoration: const InputDecoration(
-                labelText: 'Rating',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem<int>(value: 5, child: Text('5')),
-                DropdownMenuItem<int>(value: 4, child: Text('4')),
-                DropdownMenuItem<int>(value: 3, child: Text('3')),
-                DropdownMenuItem<int>(value: 2, child: Text('2')),
-                DropdownMenuItem<int>(value: 1, child: Text('1')),
-              ],
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
-                setState(() {
-                  _rating = value;
-                });
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _feedbackController,
-              minLines: 3,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                labelText: 'Feedback',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
+                  const SizedBox(height: 12),
+                ],
+            ],
+          ),
         ),
       ),
       actions: [
@@ -119,15 +105,24 @@ class _RatingDialogState extends State<RatingDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.star_outline),
-          label: const Text('Submit'),
+          label: Text(
+            _selectedUserIds.length > 1
+                ? 'Submit ${_selectedUserIds.length}'
+                : 'Submit',
+          ),
         ),
       ],
     );
   }
 
   Future<void> _submit() async {
-    final targetUserId = _targetUserId;
-    if (targetUserId == null) {
+    final selectedTargets = _targets
+        .where((target) => _selectedUserIds.contains(target.userId))
+        .toList();
+    if (selectedTargets.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select at least one member to rate.')),
+      );
       return;
     }
 
@@ -136,14 +131,16 @@ class _RatingDialogState extends State<RatingDialog> {
     });
 
     try {
-      await AppServices.ratingService.submitRating(
-        RatingRequest(
-          lobbyId: widget.historyItem.lobbyId,
-          targetUserId: targetUserId,
-          rating: _rating,
-          feedback: _feedbackController.text.trim(),
-        ),
-      );
+      for (final target in selectedTargets) {
+        await AppServices.ratingService.submitRating(
+          RatingRequest(
+            lobbyId: widget.historyItem.lobbyId,
+            targetUserId: target.userId,
+            rating: _ratingsByUserId[target.userId] ?? 5,
+            feedback: _feedbackControllers[target.userId]?.text.trim() ?? '',
+          ),
+        );
+      }
       if (!mounted) {
         return;
       }
@@ -163,5 +160,127 @@ class _RatingDialogState extends State<RatingDialog> {
         _isSubmitting = false;
       });
     }
+  }
+}
+
+class _TargetRatingEditor extends StatelessWidget {
+  const _TargetRatingEditor({
+    required this.target,
+    required this.isSelected,
+    required this.rating,
+    required this.feedbackController,
+    required this.isEnabled,
+    required this.onSelectedChanged,
+    required this.onRatingChanged,
+  });
+
+  final OrderHistoryParticipant target;
+  final bool isSelected;
+  final int rating;
+  final TextEditingController feedbackController;
+  final bool isEnabled;
+  final ValueChanged<bool> onSelectedChanged;
+  final ValueChanged<int> onRatingChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: isSelected,
+              onChanged: isEnabled
+                  ? (value) => onSelectedChanged(value ?? false)
+                  : null,
+              title: Text(target.name),
+              subtitle: Text(
+                '#${target.userId}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.outline,
+                    ),
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            const SizedBox(height: 4),
+            _StarRatingSelector(
+              rating: rating,
+              isEnabled: isEnabled,
+              onChanged: onRatingChanged,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: feedbackController,
+              enabled: isEnabled && isSelected,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Feedback',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StarRatingSelector extends StatelessWidget {
+  const _StarRatingSelector({
+    required this.rating,
+    required this.isEnabled,
+    required this.onChanged,
+  });
+
+  final int rating;
+  final bool isEnabled;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return InputDecorator(
+      decoration: const InputDecoration(
+        labelText: 'Rating',
+        border: OutlineInputBorder(),
+      ),
+      child: Row(
+        children: [
+          for (var value = 1; value <= 5; value += 1)
+            IconButton(
+              tooltip: '$value stars',
+              onPressed: isEnabled ? () => onChanged(value) : null,
+              constraints: const BoxConstraints(
+                minWidth: 36,
+                minHeight: 36,
+              ),
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                value <= rating ? Icons.star : Icons.star_border,
+                color: value <= rating ? Colors.amber.shade700 : null,
+              ),
+            ),
+          const SizedBox(width: 8),
+          Text(
+            '$rating/5',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+          ),
+        ],
+      ),
+    );
   }
 }

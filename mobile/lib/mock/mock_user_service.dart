@@ -31,6 +31,14 @@ class MockUserService implements UserService {
   }
 
   @override
+  Future<String> uploadProfileImage(ProfileImageAttachment attachment) async {
+    if (attachment.bytes.isEmpty) {
+      throw StateError('Profile image is empty.');
+    }
+    return 'mock://profile/uploaded';
+  }
+
+  @override
   Future<HostPaymentInfo?> getPaymentInfo() async {
     return _store.paymentInfoByUserId[_store.currentUser.id];
   }
@@ -126,9 +134,8 @@ class MockUserService implements UserService {
 
       _store.replaceLobby(
         lobby.copyWith(
-          hostName: lobby.hostUserId == _store.currentUser.id
-              ? name
-              : lobby.hostName,
+          hostName:
+              lobby.hostUserId == _store.currentUser.id ? name : lobby.hostName,
           members: updatedMembers,
         ),
       );

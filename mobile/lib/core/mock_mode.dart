@@ -3,13 +3,13 @@
 const useMockMode = true;
 
 // 실제 API 연결은 service별로 단계적으로 진행합니다.
-// Auth/User는 먼저 실제 API를 사용하고, 나머지는 아직 mock service를 유지합니다.
+// Auth/User/Lobby/Cart/Payment/Chat/Report/Rating/Help는 먼저 실제 API를 사용합니다.
 const useMockAuthService = false;
 const useMockUserService = false;
-const useMockLobbyService = useMockMode;
-const useMockCartService = useMockMode;
-const useMockPaymentService = useMockMode;
-const useMockChatService = useMockMode;
-const useMockReportService = useMockMode;
-const useMockRatingService = useMockMode;
-const useMockHelpService = useMockMode;
+const useMockLobbyService = false;
+const useMockCartService = false;
+const useMockPaymentService = false;
+const useMockChatService = false;
+const useMockReportService = false;
+const useMockRatingService = false;
+const useMockHelpService = false;

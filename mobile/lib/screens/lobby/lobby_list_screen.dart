@@ -10,8 +10,6 @@ import '../../widgets/empty_state_view.dart';
 import '../../widgets/error_message_view.dart';
 import '../../widgets/lobby_card.dart';
 import '../../widgets/loading_view.dart';
-import '../../widgets/status_card.dart';
-import '../../widgets/text_input_field.dart';
 
 const _allDeliveryZonesFilter = 'ALL';
 
@@ -60,6 +58,7 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
       lobbies: visibleLobbies,
       currentUser: currentUser,
       isInActiveLobby: myActiveLobby != null,
+      myActiveLobbyId: myActiveLobby?.lobbyId,
       hasPaymentInfo: paymentInfo?.isComplete == true,
     );
   }
@@ -151,6 +150,12 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Buddies',
+      centerTitle: true,
+      titleWidget: Image.asset(
+        'assets/images/buddies_logo_name.png',
+        height: 34,
+        fit: BoxFit.contain,
+      ),
       actions: [
         IconButton(
           tooltip: 'Profile',
@@ -175,56 +180,51 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
           final data = snapshot.data!;
           final lobbies = data.lobbies;
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              StatusCard(
-                title: 'Active Lobby',
-                value: '${lobbies.length} mock lobbies',
-              ),
-              const StatusCard(title: 'Mock Mode', value: 'Enabled'),
-              const SizedBox(height: 8),
-              _FilterSection(
-                restaurantController: _restaurantFilterController,
-                selectedDeliveryZone: _selectedDeliveryZoneFilter,
-                onDeliveryZoneChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() {
-                    _selectedDeliveryZoneFilter = value;
-                  });
-                },
-                onApply: _refreshLobbies,
-                onClear: _clearFilters,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Lobby List',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              if (lobbies.isEmpty)
-                SizedBox(
-                  height: 280,
-                  child: EmptyStateView(
-                    title: 'No matching lobbies',
-                    message: 'Change the filter or create a new lobby.',
-                    actionLabel: 'Clear filters',
-                    onAction: _clearFilters,
-                  ),
-                )
-              else
-                for (final lobby in lobbies)
-                  _LobbyCardContainer(
-                    lobby: lobby,
-                    currentUserId: data.currentUser.id,
-                    isCurrentUserInActiveLobby: data.isInActiveLobby,
-                    onTap: () => _openLobbyDetail(lobby.lobbyId),
-                    onJoin: () => _joinLobby(lobby),
-                  ),
-              const SizedBox(height: 96),
-            ],
+          return DecoratedBox(
+            decoration: const BoxDecoration(color: Color(0xFFF5F5FA)),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              children: [
+                _FilterSection(
+                  restaurantController: _restaurantFilterController,
+                  selectedDeliveryZone: _selectedDeliveryZoneFilter,
+                  onDeliveryZoneChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _selectedDeliveryZoneFilter = value;
+                    });
+                  },
+                  onApply: _refreshLobbies,
+                  onClear: _clearFilters,
+                ),
+                const SizedBox(height: 18),
+                _LobbyListHeader(count: lobbies.length),
+                const SizedBox(height: 10),
+                if (lobbies.isEmpty)
+                  SizedBox(
+                    height: 280,
+                    child: EmptyStateView(
+                      title: 'No matching lobbies',
+                      message: 'Change the filter or create a new lobby.',
+                      actionLabel: 'Clear filters',
+                      onAction: _clearFilters,
+                    ),
+                  )
+                else
+                  for (final lobby in lobbies)
+                    _LobbyCardContainer(
+                      lobby: lobby,
+                      currentUserId: data.currentUser.id,
+                      myActiveLobbyId: data.myActiveLobbyId,
+                      isCurrentUserInActiveLobby: data.isInActiveLobby,
+                      onTap: () => _openLobbyDetail(lobby.lobbyId),
+                      onJoin: () => _joinLobby(lobby),
+                    ),
+                const SizedBox(height: 96),
+              ],
+            ),
           );
         },
       ),
@@ -252,6 +252,46 @@ class _LobbyListScreenState extends State<LobbyListScreen> {
   }
 }
 
+class _LobbyListHeader extends StatelessWidget {
+  const _LobbyListHeader({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            'Lobbies',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0,
+                ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: colorScheme.outlineVariant),
+          ),
+          child: Text(
+            '$count',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colorScheme.outline,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CreateLobbyFab extends StatelessWidget {
   const _CreateLobbyFab({
     required this.canCreate,
@@ -267,23 +307,36 @@ class _CreateLobbyFab extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final backgroundColor = canCreate
-        ? colorScheme.primaryContainer
+        ? const Color(0xFF0054FF)
         : colorScheme.surfaceContainerHighest;
-    final foregroundColor =
-        canCreate ? colorScheme.onPrimaryContainer : colorScheme.outline;
+    final foregroundColor = canCreate ? Colors.white : colorScheme.outline;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        FloatingActionButton.extended(
-          onPressed: canCreate ? onCreate : null,
-          tooltip: disabledReason ?? 'Create Lobby',
-          backgroundColor: backgroundColor,
-          foregroundColor: foregroundColor,
-          elevation: canCreate ? 6 : 0,
-          icon: Icon(canCreate ? Icons.add : Icons.lock_outline),
-          label: const Text('Create Lobby'),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: canCreate
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF0054FF).withValues(alpha: 0.14),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: FloatingActionButton.extended(
+            onPressed: canCreate ? onCreate : null,
+            tooltip: disabledReason ?? 'Create Lobby',
+            backgroundColor: backgroundColor,
+            foregroundColor: foregroundColor,
+            elevation: 0,
+            icon: Icon(canCreate ? Icons.add : Icons.lock_outline),
+            label: const Text('Create Lobby'),
+          ),
         ),
         if (!canCreate && disabledReason != null) ...[
           const SizedBox(height: 6),
@@ -308,12 +361,14 @@ class _LobbyListData {
     required this.lobbies,
     required this.currentUser,
     required this.isInActiveLobby,
+    this.myActiveLobbyId,
     required this.hasPaymentInfo,
   });
 
   final List<Lobby> lobbies;
   final User currentUser;
   final bool isInActiveLobby;
+  final int? myActiveLobbyId;
   final bool hasPaymentInfo;
 }
 
@@ -334,53 +389,109 @@ class _FilterSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        TextInputField(
-          controller: restaurantController,
-          label: 'Restaurant filter',
-          hintText: 'Pizza',
-          prefixIcon: Icons.search,
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
         ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          initialValue: selectedDeliveryZone,
-          decoration: const InputDecoration(
-            labelText: 'Delivery zone filter',
-            prefixIcon: Icon(Icons.place_outlined),
-            border: OutlineInputBorder(),
-          ),
-          items: [
-            const DropdownMenuItem<String>(
-              value: _allDeliveryZonesFilter,
-              child: Text('All zones'),
-            ),
-            for (final zone in DeliveryZone.values)
-              DropdownMenuItem<String>(
-                value: zone,
-                child: Text(zone),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: TextField(
+              controller: restaurantController,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => onApply(),
+              decoration: InputDecoration(
+                hintText: 'Search restaurant',
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 20,
+                  color: Color(0xFF0054FF),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF0F3FA),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: const BorderSide(color: Color(0xFFD9E4FF)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: const BorderSide(color: Color(0xFF0054FF)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                border: OutlineInputBorder(
+                  borderSide: const BorderSide(color: Color(0xFFD9E4FF)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
               ),
-          ],
-          onChanged: onDeliveryZoneChanged,
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            OutlinedButton.icon(
-              onPressed: onClear,
-              icon: const Icon(Icons.clear),
-              label: const Text('Clear'),
             ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: onApply,
-              icon: const Icon(Icons.search),
-              label: const Text('Apply filters'),
+          ),
+          Divider(height: 1, color: colorScheme.outlineVariant),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedDeliveryZone,
+                      isExpanded: true,
+                      icon: const Icon(Icons.chevron_right, size: 20),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: _allDeliveryZonesFilter,
+                          child: Text('All delivery zones'),
+                        ),
+                        for (final zone in DeliveryZone.values)
+                          DropdownMenuItem<String>(
+                            value: zone,
+                            child: Text(zone),
+                          ),
+                      ],
+                      onChanged: onDeliveryZoneChanged,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Clear filters',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onClear,
+                  icon: const Icon(Icons.close),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0054FF).withValues(alpha: 0.06),
+                        blurRadius: 6,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: FilledButton(
+                    onPressed: onApply,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF0054FF),
+                      foregroundColor: Colors.white,
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                    ),
+                    child: const Text('Apply'),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -389,6 +500,7 @@ class _LobbyCardContainer extends StatelessWidget {
   const _LobbyCardContainer({
     required this.lobby,
     required this.currentUserId,
+    required this.myActiveLobbyId,
     required this.isCurrentUserInActiveLobby,
     required this.onTap,
     required this.onJoin,
@@ -396,15 +508,17 @@ class _LobbyCardContainer extends StatelessWidget {
 
   final Lobby lobby;
   final int currentUserId;
+  final int? myActiveLobbyId;
   final bool isCurrentUserInActiveLobby;
   final VoidCallback onTap;
   final VoidCallback onJoin;
 
   @override
   Widget build(BuildContext context) {
-    final isMember = lobby.members.any(
-      (member) => member.userId == currentUserId && member.isActive,
-    );
+    final isMember = lobby.lobbyId == myActiveLobbyId ||
+        lobby.members.any(
+          (member) => member.userId == currentUserId && member.isActive,
+        );
     final canJoin = lobby.canJoin && !isMember && !isCurrentUserInActiveLobby;
     final showJoinAction = lobby.canJoin && !isMember;
     final joinDisabledReason = showJoinAction && isCurrentUserInActiveLobby
@@ -419,7 +533,6 @@ class _LobbyCardContainer extends StatelessWidget {
       remainingAmount: lobby.remainingAmount,
       participantCount: lobby.participantCount ?? lobby.members.length,
       orderStatus: lobby.orderStatus,
-      unreadCount: isMember ? lobby.unreadCount : 0,
       isMyLobby: isMember,
       canJoin: canJoin,
       showJoinAction: showJoinAction,

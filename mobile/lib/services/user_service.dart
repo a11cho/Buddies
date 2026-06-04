@@ -1,6 +1,20 @@
+import 'dart:typed_data';
+
 import '../models/host_payment_info.dart';
 import '../models/order_history_item.dart';
 import '../models/user.dart';
+
+class ProfileImageAttachment {
+  const ProfileImageAttachment({
+    required this.filename,
+    required this.contentType,
+    required this.bytes,
+  });
+
+  final String filename;
+  final String contentType;
+  final Uint8List bytes;
+}
 
 class UpdateProfileRequest {
   const UpdateProfileRequest({
@@ -45,6 +59,8 @@ abstract class UserService {
   Future<User> getMe();
 
   Future<User> updateMe(UpdateProfileRequest request);
+
+  Future<String> uploadProfileImage(ProfileImageAttachment attachment);
 
   Future<HostPaymentInfo?> getPaymentInfo();
 

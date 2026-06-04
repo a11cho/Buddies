@@ -51,43 +51,63 @@ class _CartItemFormDialogState extends State<CartItemFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return AlertDialog(
+      backgroundColor: const Color(0xFFF5F5FA),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+      ),
       title: Text(_isEditing ? 'Edit item' : 'Add item'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextInputField(
-              controller: _itemNameController,
-              label: 'Item name',
-              prefixIcon: Icons.fastfood_outlined,
+      content: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          border: Border.all(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextInputField(
+                  controller: _itemNameController,
+                  label: 'Item name',
+                  prefixIcon: Icons.fastfood_outlined,
+                ),
+                const SizedBox(height: 12),
+                TextInputField(
+                  controller: _unitPriceController,
+                  label: 'Unit price',
+                  keyboardType: TextInputType.number,
+                  prefixIcon: Icons.payments_outlined,
+                ),
+                const SizedBox(height: 12),
+                TextInputField(
+                  controller: _quantityController,
+                  label: 'Quantity',
+                  keyboardType: TextInputType.number,
+                  prefixIcon: Icons.numbers_outlined,
+                ),
+                if (_errorText != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _errorText!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.error,
+                        ),
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 12),
-            TextInputField(
-              controller: _unitPriceController,
-              label: 'Unit price',
-              keyboardType: TextInputType.number,
-              prefixIcon: Icons.payments_outlined,
-            ),
-            const SizedBox(height: 12),
-            TextInputField(
-              controller: _quantityController,
-              label: 'Quantity',
-              keyboardType: TextInputType.number,
-              prefixIcon: Icons.numbers_outlined,
-            ),
-            if (_errorText != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _errorText!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       actions: [
         TextButton(
           onPressed: () {
@@ -95,9 +115,25 @@ class _CartItemFormDialogState extends State<CartItemFormDialog> {
           },
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: Text(_isEditing ? 'Save' : 'Add'),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.primary.withValues(alpha: 0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: FilledButton(
+            onPressed: _submit,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF0054FF),
+              foregroundColor: Colors.white,
+            ),
+            child: Text(_isEditing ? 'Save' : 'Add'),
+          ),
         ),
       ],
     );
@@ -112,7 +148,7 @@ class _CartItemFormDialogState extends State<CartItemFormDialog> {
         unitPrice == null ||
         unitPrice <= 0 ||
         quantity == null ||
-      quantity <= 0) {
+        quantity <= 0) {
       setState(() {
         _errorText =
             'Item name, positive unit price, and quantity are required.';

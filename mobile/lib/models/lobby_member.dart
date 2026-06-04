@@ -12,6 +12,7 @@ class LobbyMember {
     this.leftAt,
     this.lastReadMessageId,
     this.lastReadAt,
+    this.trustScore,
   });
 
   final int userId;
@@ -22,6 +23,7 @@ class LobbyMember {
   final DateTime? leftAt;
   final int? lastReadMessageId;
   final DateTime? lastReadAt;
+  final double? trustScore;
 
   bool get isHost => roleInLobby == RoleInLobby.host;
 
@@ -36,6 +38,7 @@ class LobbyMember {
     DateTime? leftAt,
     int? lastReadMessageId,
     DateTime? lastReadAt,
+    double? trustScore,
   }) {
     return LobbyMember(
       userId: userId ?? this.userId,
@@ -46,6 +49,7 @@ class LobbyMember {
       leftAt: leftAt ?? this.leftAt,
       lastReadMessageId: lastReadMessageId ?? this.lastReadMessageId,
       lastReadAt: lastReadAt ?? this.lastReadAt,
+      trustScore: trustScore ?? this.trustScore,
     );
   }
 
@@ -61,7 +65,17 @@ class LobbyMember {
       lastReadMessageId:
           parseNullableJsonInt(json['lastReadMessageId'], 'lastReadMessageId'),
       lastReadAt: parseNullableDateTime(json['lastReadAt']),
+      trustScore: _parseTrustScore(json),
     );
+  }
+
+  static double? _parseTrustScore(Map<String, dynamic> json) {
+    final value = json['trustScore'] ??
+        json['rate'] ??
+        json['rating'] ??
+        json['averageRating'] ??
+        json['trust_score'];
+    return value == null ? null : parseJsonDouble(value, 'trustScore');
   }
 
   Map<String, dynamic> toJson() {
@@ -74,6 +88,7 @@ class LobbyMember {
       'leftAt': leftAt?.toIso8601String(),
       'lastReadMessageId': lastReadMessageId,
       'lastReadAt': lastReadAt?.toIso8601String(),
+      'trustScore': trustScore,
     };
   }
 }

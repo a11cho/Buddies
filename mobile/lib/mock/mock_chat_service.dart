@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../core/enums.dart';
 import '../models/chat_history_response.dart';
 import '../models/chat_message.dart';
@@ -9,6 +11,7 @@ class MockChatService implements ChatService {
   MockChatService({MockDataStore? store}) : _store = store ?? mockDataStore;
 
   final MockDataStore _store;
+  final Map<int, StreamController<ChatMessage>> _messageControllers = {};
 
   static const _restrictedKeywords = [
     'badword',
@@ -31,6 +34,13 @@ class MockChatService implements ChatService {
   }
 
   @override
+  Stream<ChatMessage> watchMessages(int lobbyId) {
+    return _messageControllers
+        .putIfAbsent(lobbyId, () => StreamController<ChatMessage>.broadcast())
+        .stream;
+  }
+
+  @override
   Future<ChatHistoryResponse> getMessages(
     int lobbyId, {
     int limit = ChatValidation.defaultHistoryLimit,
@@ -50,7 +60,7 @@ class MockChatService implements ChatService {
   }
 
   @override
-  Future<ChatMessage> sendMessage(int lobbyId, String content) async {
+  Future<void> sendMessage(int lobbyId, String content) async {
     final lobby = _store.findLobby(lobbyId);
     _ensureCurrentUserIsActiveMember(lobby);
     _validateUserMessage(lobbyId, content);
@@ -66,11 +76,11 @@ class MockChatService implements ChatService {
     _store.findMessages(lobbyId).add(message);
     _recordUserMessage(lobbyId);
     await markAsRead(lobbyId, message.id);
-    return message;
+    _messageControllers[lobbyId]?.add(message);
   }
 
   @override
-  Future<ChatMessage> sendMediaMessage(int lobbyId, String mediaUrl) async {
+  Future<void> sendMediaMessage(int lobbyId, String mediaUrl) async {
     final lobby = _store.findLobby(lobbyId);
     _ensureCurrentUserIsActiveMember(lobby);
     _validateMediaMessage(lobbyId, mediaUrl);
@@ -86,7 +96,15 @@ class MockChatService implements ChatService {
     _store.findMessages(lobbyId).add(message);
     _recordUserMessage(lobbyId);
     await markAsRead(lobbyId, message.id);
-    return message;
+    _messageControllers[lobbyId]?.add(message);
+  }
+
+  @override
+  Future<void> sendImageMessage(
+    int lobbyId,
+    ChatImageAttachment attachment,
+  ) {
+    return sendMediaMessage(lobbyId, 'mock-media://${attachment.filename}');
   }
 
   void _validateUserMessage(int lobbyId, String content) {
@@ -181,9 +199,8 @@ class MockChatService implements ChatService {
     final messages = _store.findMessages(lobbyId);
     final nextLastReadMessageId =
         _maxReadMessageId(lobby.lastReadMessageId, messageId);
-    final unreadCount = messages
-        .where((message) => message.id > nextLastReadMessageId)
-        .length;
+    final unreadCount =
+        messages.where((message) => message.id > nextLastReadMessageId).length;
     final readAt = DateTime.now();
 
     final updatedMembers = lobby.members.map((member) {
@@ -204,6 +221,9 @@ class MockChatService implements ChatService {
       ),
     );
   }
+
+  @override
+  Future<void> disconnect(int lobbyId) async {}
 
   void _ensureCurrentUserIsActiveMember(Lobby lobby) {
     final isActiveLobby = lobby.orderStatus != LobbyStatus.closed &&

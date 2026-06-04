@@ -1,5 +1,19 @@
+import 'dart:typed_data';
+
 import '../models/chat_history_response.dart';
 import '../models/chat_message.dart';
+
+class ChatImageAttachment {
+  const ChatImageAttachment({
+    required this.filename,
+    required this.contentType,
+    required this.bytes,
+  });
+
+  final String filename;
+  final String contentType;
+  final Uint8List bytes;
+}
 
 class ChatConnectionInfo {
   const ChatConnectionInfo({
@@ -41,15 +55,21 @@ class ChatValidation {
 abstract class ChatService {
   Future<ChatConnectionInfo> getConnectionInfo(int lobbyId);
 
+  Stream<ChatMessage> watchMessages(int lobbyId);
+
   Future<ChatHistoryResponse> getMessages(
     int lobbyId, {
     int limit = ChatValidation.defaultHistoryLimit,
     int? cursor,
   });
 
-  Future<ChatMessage> sendMessage(int lobbyId, String content);
+  Future<void> sendMessage(int lobbyId, String content);
 
-  Future<ChatMessage> sendMediaMessage(int lobbyId, String mediaUrl);
+  Future<void> sendMediaMessage(int lobbyId, String mediaUrl);
+
+  Future<void> sendImageMessage(int lobbyId, ChatImageAttachment attachment);
 
   Future<void> markAsRead(int lobbyId, int messageId);
+
+  Future<void> disconnect(int lobbyId);
 }

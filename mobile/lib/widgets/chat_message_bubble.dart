@@ -26,45 +26,74 @@ class ChatMessageBubble extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Center(
-          child: Text(
-            content ?? '',
-            style: Theme.of(context).textTheme.bodySmall,
-            textAlign: TextAlign.center,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xFFEDEDED),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              child: Text(
+                content ?? '',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                      fontWeight: FontWeight.w600,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ),
           ),
         ),
       );
     }
 
-    final bubbleColor = isMine
-        ? Theme.of(context).colorScheme.primaryContainer
-        : Theme.of(context).colorScheme.surfaceContainerHighest;
+    final colorScheme = Theme.of(context).colorScheme;
+    final bubbleColor = isMine ? const Color(0xFF0054FF) : colorScheme.surface;
+    final textColor = isMine ? Colors.white : colorScheme.onSurface;
     final alignment = isMine ? Alignment.centerRight : Alignment.centerLeft;
 
     return Align(
       alignment: alignment,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 280),
+        constraints: const BoxConstraints(maxWidth: 286),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: bubbleColor,
-            borderRadius: BorderRadius.circular(12),
+            border: isMine
+                ? null
+                : Border.all(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.7)),
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(18),
+              topRight: const Radius.circular(18),
+              bottomLeft: Radius.circular(isMine ? 18 : 5),
+              bottomRight: Radius.circular(isMine ? 5 : 18),
+            ),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (!isMine && senderName != null) ...[
                   Text(
                     senderName!,
-                    style: Theme.of(context).textTheme.labelSmall,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: colorScheme.outline,
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
                   const SizedBox(height: 4),
                 ],
                 if (messageType == ChatMessageType.media)
-                  _MediaPlaceholder(mediaUrl: mediaUrl)
+                  _MediaAttachment(mediaUrl: mediaUrl)
                 else
-                  Text(content ?? ''),
+                  Text(
+                    content ?? '',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: textColor,
+                        ),
+                  ),
               ],
             ),
           ),
@@ -74,8 +103,8 @@ class ChatMessageBubble extends StatelessWidget {
   }
 }
 
-class _MediaPlaceholder extends StatelessWidget {
-  const _MediaPlaceholder({required this.mediaUrl});
+class _MediaAttachment extends StatelessWidget {
+  const _MediaAttachment({required this.mediaUrl});
 
   final String? mediaUrl;
 
@@ -84,6 +113,68 @@ class _MediaPlaceholder extends StatelessWidget {
     final label = _mediaLabel(mediaUrl);
     final colorScheme = Theme.of(context).colorScheme;
 
+    final url = mediaUrl;
+    final canRenderImage = url != null &&
+        (url.startsWith('http://') || url.startsWith('https://'));
+
+    if (canRenderImage) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(
+          url,
+          width: 220,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _MediaFallback(
+              label: label,
+              colorScheme: colorScheme,
+            );
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) {
+              return child;
+            }
+            return SizedBox(
+              width: 220,
+              height: 140,
+              child: Center(
+                child: CircularProgressIndicator(
+                  value: loadingProgress.expectedTotalBytes == null
+                      ? null
+                      : loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!,
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    return _MediaFallback(label: label, colorScheme: colorScheme);
+  }
+
+  String? _mediaLabel(String? value) {
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    final normalized = value.replaceFirst('mock-media://', '');
+    return normalized.split('/').last;
+  }
+}
+
+class _MediaFallback extends StatelessWidget {
+  const _MediaFallback({
+    required this.label,
+    required this.colorScheme,
+  });
+
+  final String? label;
+  final ColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelText = label;
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -91,7 +182,7 @@ class _MediaPlaceholder extends StatelessWidget {
         DecoratedBox(
           decoration: BoxDecoration(
             color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: colorScheme.outlineVariant),
           ),
           child: const SizedBox.square(
@@ -109,10 +200,10 @@ class _MediaPlaceholder extends StatelessWidget {
                 'Photo attachment',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              if (label != null) ...[
+              if (labelText != null) ...[
                 const SizedBox(height: 2),
                 Text(
-                  label,
+                  labelText,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
@@ -122,13 +213,5 @@ class _MediaPlaceholder extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  String? _mediaLabel(String? value) {
-    if (value == null || value.isEmpty) {
-      return null;
-    }
-    final normalized = value.replaceFirst('mock-media://', '');
-    return normalized.split('/').last;
   }
 }

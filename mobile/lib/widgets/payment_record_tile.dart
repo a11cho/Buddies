@@ -22,30 +22,58 @@ class PaymentRecordTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final isPaid = status == PaymentStatus.paid;
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      title: Text(userName),
-      subtitle: Text('Amount $amount'),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Chip(
-            label: Text(status),
-            avatar: Icon(
-              isPaid ? Icons.check_circle_outline : Icons.schedule_outlined,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        title: Text(
+          userName,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        subtitle: Text(
+          'Amount $amount',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.outline,
+              ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Chip(
+              visualDensity: VisualDensity.compact,
+              label: Text(status),
+              avatar: Icon(
+                isPaid ? Icons.check_circle_outline : Icons.schedule_outlined,
+                size: 16,
+              ),
             ),
-          ),
-          if (canConfirm) ...[
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: isPaid ? null : onConfirm,
-              icon: const Icon(Icons.verified_outlined),
-              label: const Text('Confirm'),
-            ),
+            if (canConfirm) ...[
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: isPaid ? null : onConfirm,
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+                icon: const Icon(Icons.verified_outlined, size: 18),
+                label: const Text('Confirm'),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
