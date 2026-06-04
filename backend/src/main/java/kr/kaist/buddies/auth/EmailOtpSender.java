@@ -22,18 +22,21 @@ public class EmailOtpSender {
     private final String signupSubject;
     private final String passwordResetSubject;
     private final PublicUrlBuilder publicUrlBuilder;
+    private final boolean failOnSendError;
 
     public EmailOtpSender(
         ObjectProvider<JavaMailSender> mailSenderProvider,
         @Value("${buddies.mail.from}") String from,
         @Value("${buddies.mail.signup-subject}") String signupSubject,
         @Value("${buddies.mail.password-reset-subject}") String passwordResetSubject,
+        @Value("${buddies.mail.fail-on-send-error:false}") boolean failOnSendError,
         PublicUrlBuilder publicUrlBuilder
     ) {
         this.mailSenderProvider = mailSenderProvider;
         this.from = from;
         this.signupSubject = signupSubject;
         this.passwordResetSubject = passwordResetSubject;
+        this.failOnSendError = failOnSendError;
         this.publicUrlBuilder = publicUrlBuilder;
     }
 
@@ -60,6 +63,10 @@ public class EmailOtpSender {
             mailSender.send(message);
         } catch (MailException exception) {
             log.warn("Failed to send signup OTP email to {}", email, exception);
+            log.info("Signup OTP fallback for {}: {}", email, otp);
+            if (!failOnSendError) {
+                return;
+            }
             throw new AuthException(HttpStatus.INTERNAL_SERVER_ERROR, "인증 코드 이메일 발송에 실패했습니다.");
         }
     }
@@ -89,6 +96,10 @@ public class EmailOtpSender {
             mailSender.send(message);
         } catch (MailException exception) {
             log.warn("Failed to send password reset email to {}", email, exception);
+            log.info("Password reset link fallback for {}: {}", email, resetLink);
+            if (!failOnSendError) {
+                return;
+            }
             throw new AuthException(HttpStatus.INTERNAL_SERVER_ERROR, "비밀번호 재설정 이메일 발송에 실패했습니다.");
         }
     }

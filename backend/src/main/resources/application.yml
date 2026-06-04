@@ -37,7 +37,7 @@ management:
         include: health,info
 
 buddies:
-  external-access: ${BUDDIES_EXTERNAL_ACCESS:false}
+  external-access: true
   storage:
     gcs:
       bucket-name: ${BUDDIES_GCS_BUCKET_NAME:}
@@ -51,6 +51,7 @@ buddies:
     from: ${BUDDIES_MAIL_FROM:no-reply@buddies.local}
     signup-subject: ${BUDDIES_MAIL_SIGNUP_SUBJECT:Buddies 인증 코드}
     password-reset-subject: ${BUDDIES_MAIL_PASSWORD_RESET_SUBJECT:Buddies 비밀번호 재설정}
+    fail-on-send-error: ${BUDDIES_MAIL_FAIL_ON_SEND_ERROR:false}
   admin:
     bootstrap:
       enabled: ${BUDDIES_ADMIN_BOOTSTRAP_ENABLED:true}
