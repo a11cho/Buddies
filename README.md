@@ -35,18 +35,17 @@ curl -k https://localhost:8443/actuator/health
 To allow another device on the same network to use the local admin web while testing, enable external access for the backend:
 
 ```bash
-BUDDIES_EXTERNAL_ACCESS=true BUDDIES_PUBLIC_BASE_URL=https://<your-computer-ip>:8443 docker compose up --build
+BUDDIES_EXTERNAL_ACCESS=true docker compose up --build
 ```
 
 PowerShell:
 
 ```powershell
 $env:BUDDIES_EXTERNAL_ACCESS = 'true'
-$env:BUDDIES_PUBLIC_BASE_URL = 'https://<your-computer-ip>:8443'
 docker compose up --build
 ```
 
-Then start `admin-web` with `npm run dev` and open `http://<your-computer-ip>:5173` on the other device. Password reset emails use `BUDDIES_PUBLIC_BASE_URL` when building links. Leave `BUDDIES_EXTERNAL_ACCESS` unset or set it to `false` for normal localhost-only testing.
+Then start `admin-web` with `npm run dev` and open `http://<your-computer-ip>:5173` on the other device. Password reset emails use the external URL hard-coded in `PublicUrlBuilder` when `BUDDIES_EXTERNAL_ACCESS=true`; otherwise they use `https://localhost:8443`. Leave `BUDDIES_EXTERNAL_ACCESS` unset or set it to `false` for normal localhost-only testing.
 
 The Docker backend image generates a local self-signed PKCS12 keystore at `/app/ssl/dev-ssl.p12` during image build.
 

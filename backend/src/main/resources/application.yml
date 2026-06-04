@@ -38,7 +38,6 @@ management:
 
 buddies:
   external-access: ${BUDDIES_EXTERNAL_ACCESS:false}
-  public-base-url: ${BUDDIES_PUBLIC_BASE_URL:https://localhost:8443}
   storage:
     gcs:
       bucket-name: ${BUDDIES_GCS_BUCKET_NAME:}
