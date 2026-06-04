@@ -18,8 +18,8 @@ RUN mkdir -p /app/ssl && \
       -storepass buddies-local-ssl \
       -keypass buddies-local-ssl \
       -validity 3650 \
-      -dname "CN=localhost, OU=Development, O=Buddies, L=Daejeon, ST=Daejeon, C=KR" \
-      -ext "SAN=dns:localhost,ip:127.0.0.1"
+      -dname "CN=110.76.94.211, OU=Development, O=Buddies, L=Daejeon, ST=Daejeon, C=KR" \
+      -ext "SAN=dns:localhost,ip:127.0.0.1,ip:110.76.94.211"
 EXPOSE 8443
 ENTRYPOINT ["java", "-jar", "app.jar"]
 

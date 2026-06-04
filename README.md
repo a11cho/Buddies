@@ -35,6 +35,7 @@ curl -k https://localhost:8443/actuator/health
 To allow another device on the same network to use the local admin web while testing, set `buddies.external-access` in `backend/src/main/resources/application.yml` to `true` and make sure `PublicUrlBuilder.EXTERNAL_PUBLIC_BASE_URL` matches the server address.
 
 ```bash
+bash backend/scripts/generate-dev-ssl.sh
 docker compose up --build
 ```
 
@@ -44,7 +45,7 @@ PowerShell:
 docker compose up --build
 ```
 
-Then start `admin-web` with `npm run dev` and open `https://110.76.94.211:5173` on the other device. The admin web HTTPS toggle and host are hard-coded in `admin-web/vite.config.ts`; password reset emails use the external URL hard-coded in `PublicUrlBuilder` when `buddies.external-access=true`, otherwise they use `https://localhost:8443`.
+Then start `admin-web` with `npm run dev` and open `https://110.76.94.211:5173` on the other device. The admin web HTTPS toggle, host, and development certificate path are hard-coded in `admin-web/vite.config.ts`; password reset emails use the external URL hard-coded in `PublicUrlBuilder` when `buddies.external-access=true`, otherwise they use `https://localhost:8443`.
 
 The Docker backend image generates a local self-signed PKCS12 keystore at `/app/ssl/dev-ssl.p12` during image build.
 
