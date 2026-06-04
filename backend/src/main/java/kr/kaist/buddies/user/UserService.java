@@ -7,6 +7,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import kr.kaist.buddies.auth.AuthException;
+import kr.kaist.buddies.storage.ImageUploadUrlService;
+import kr.kaist.buddies.storage.ImageUploadUrlService.ImageUploadUrl;
 import kr.kaist.buddies.user.UserController.FaqResponse;
 import kr.kaist.buddies.user.UserController.MessageResponse;
 import kr.kaist.buddies.user.UserController.OrderHistoryItem;
@@ -39,15 +41,18 @@ public class UserService {
     private final UserRepository userRepository;
     private final HostPaymentInfoRepository hostPaymentInfoRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final ImageUploadUrlService imageUploadUrlService;
 
     public UserService(
         UserRepository userRepository,
         HostPaymentInfoRepository hostPaymentInfoRepository,
-        JdbcTemplate jdbcTemplate
+        JdbcTemplate jdbcTemplate,
+        ImageUploadUrlService imageUploadUrlService
     ) {
         this.userRepository = userRepository;
         this.hostPaymentInfoRepository = hostPaymentInfoRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.imageUploadUrlService = imageUploadUrlService;
     }
 
     @Transactional(readOnly = true)
@@ -98,12 +103,9 @@ public class UserService {
     @Transactional(readOnly = true)
     public ProfileImageUploadUrlResponse issueProfileImageUploadUrl(Long userId, ProfileImageUploadUrlRequest request) {
         requireActive(findUser(userId));
-        String extension = requireSupportedImageType(request.contentType());
-        String safeFilename = request.filename().replaceAll("[^A-Za-z0-9._-]", "_");
-        return new ProfileImageUploadUrlResponse(
-            "https://storage.example.com/profile/" + userId + "/" + safeFilename,
-            "https://cdn.example.com/profile/" + userId + extension
-        );
+        requireSupportedImageType(request.contentType());
+        ImageUploadUrl uploadUrl = imageUploadUrlService.issue("profile/" + userId, request.contentType());
+        return new ProfileImageUploadUrlResponse(uploadUrl.uploadUrl(), uploadUrl.mediaUrl());
     }
 
     @Transactional(readOnly = true)
