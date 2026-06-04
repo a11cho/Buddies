@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/enums.dart';
 import '../../core/service_registry.dart';
@@ -18,7 +19,6 @@ import '../../widgets/app_scaffold.dart';
 import '../../widgets/error_message_view.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/payment_record_tile.dart';
-import '../../widgets/primary_button.dart';
 import '../cart/cart_item_form_dialog.dart';
 import '../profile/rating_dialog.dart';
 
@@ -912,7 +912,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
 
     return AppScaffold(
       title: detailTitle,
-      appBarBackgroundColor: const Color(0xFFF5F5FA),
+      appBarBackgroundColor: AppColors.background,
       body: FutureBuilder<_LobbyDetailData>(
         future: detailFuture,
         initialData: _cachedDetailData,
@@ -990,7 +990,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
             fit: StackFit.expand,
             children: [
               DecoratedBox(
-                decoration: const BoxDecoration(color: Color(0xFFF5F5FA)),
+                decoration: const BoxDecoration(color: AppColors.background),
                 child: ListView(
                   key: PageStorageKey<String>('lobby-detail-${lobby.lobbyId}'),
                   padding: EdgeInsets.fromLTRB(16, 12, 16, isMember ? 104 : 24),
@@ -1008,95 +1008,104 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                       minimumOrderAmount: lobby.minimumOrderAmount,
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _CompactPanel(
-                            title: _memberCountTitle(participantCount),
-                            children: [
-                              if (!canViewMembers)
-                                const _CompactMutedText(
-                                  'Member list is unavailable.',
-                                )
-                              else if (displayMembers.isEmpty)
-                                const _CompactMutedText(
-                                  'Member list is unavailable.',
-                                )
-                              else ...[
-                                if (visibleMembers.isEmpty)
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: _CompactPanel(
+                              title: _memberCountTitle(participantCount),
+                              children: [
+                                if (!canViewMembers)
                                   const _CompactMutedText(
-                                    'Active member list is unavailable.',
-                                  ),
-                                for (final member in displayMembers)
-                                  _CompactMemberRow(
-                                    member: member,
-                                    canKick: canKickMembers &&
-                                        !member.isHost &&
-                                        member.isActive &&
-                                        !memberActionInProgress,
-                                    isKicking: _kickingUserId == member.userId,
-                                    canTransferHost: canTransferHost &&
-                                        !member.isHost &&
-                                        member.isActive &&
-                                        !memberActionInProgress,
-                                    isTransferringHost:
-                                        _transferringHostUserId ==
-                                            member.userId,
-                                    onViewProfile: () => _showMemberProfile(
-                                      lobby,
-                                      member,
-                                      data.currentUser,
+                                    'Member list is unavailable.',
+                                  )
+                                else if (displayMembers.isEmpty)
+                                  const _CompactMutedText(
+                                    'Member list is unavailable.',
+                                  )
+                                else ...[
+                                  if (visibleMembers.isEmpty)
+                                    const _CompactMutedText(
+                                      'Active member list is unavailable.',
                                     ),
-                                    onKick: () => _kickMember(lobby, member),
-                                    onTransferHost: () =>
-                                        _transferHost(lobby, member),
-                                  ),
-                                if (hiddenMemberCount > 0)
-                                  _CompactMutedText(
-                                    '$hiddenMemberCount hidden by API.',
+                                  for (final member in displayMembers)
+                                    _CompactMemberRow(
+                                      member: member,
+                                      showDivider:
+                                          member != displayMembers.last ||
+                                              hiddenMemberCount > 0,
+                                      canKick: canKickMembers &&
+                                          !member.isHost &&
+                                          member.isActive &&
+                                          !memberActionInProgress,
+                                      isKicking:
+                                          _kickingUserId == member.userId,
+                                      canTransferHost: canTransferHost &&
+                                          !member.isHost &&
+                                          member.isActive &&
+                                          !memberActionInProgress,
+                                      isTransferringHost:
+                                          _transferringHostUserId ==
+                                              member.userId,
+                                      onViewProfile: () => _showMemberProfile(
+                                        lobby,
+                                        member,
+                                        data.currentUser,
+                                      ),
+                                      onKick: () => _kickMember(lobby, member),
+                                      onTransferHost: () =>
+                                          _transferHost(lobby, member),
+                                    ),
+                                  if (hiddenMemberCount > 0)
+                                    _CompactMutedText(
+                                      '$hiddenMemberCount hidden by API.',
+                                    ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _CompactPanel(
+                              title: 'Cart Items',
+                              action: canEditCart
+                                  ? _AddItemIconButton(
+                                      onPressed: () => _addCartItem(lobby),
+                                    )
+                                  : null,
+                              children: [
+                                if (lobby.cartItems.isEmpty)
+                                  const _CompactMutedText('No cart items yet.')
+                                else
+                                  for (final item in lobby.cartItems)
+                                    _CompactCartItemRow(
+                                      itemName: item.itemName,
+                                      unitPrice: item.unitPrice,
+                                      quantity: item.quantity,
+                                      subtotal: item.subtotal,
+                                      showDivider:
+                                          item != lobby.cartItems.last ||
+                                              (isMember && !lobby.canEditCart),
+                                      ownerName: _memberNameById(
+                                        lobby,
+                                        item.ownerUserId,
+                                      ),
+                                      canEdit: canEditCart &&
+                                          item.isOwnedBy(data.currentUser.id),
+                                      onEdit: () => _editCartItem(lobby, item),
+                                      onDelete: () =>
+                                          _deleteCartItem(lobby, item),
+                                    ),
+                                if (isMember && !lobby.canEditCart)
+                                  const _CompactMutedText(
+                                    'Editing is unavailable after lock.',
                                   ),
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _CompactPanel(
-                            title: 'Cart Items',
-                            action: canEditCart
-                                ? _AddItemIconButton(
-                                    onPressed: () => _addCartItem(lobby),
-                                  )
-                                : null,
-                            children: [
-                              if (lobby.cartItems.isEmpty)
-                                const _CompactMutedText('No cart items yet.')
-                              else
-                                for (final item in lobby.cartItems)
-                                  _CompactCartItemRow(
-                                    itemName: item.itemName,
-                                    unitPrice: item.unitPrice,
-                                    quantity: item.quantity,
-                                    subtotal: item.subtotal,
-                                    ownerName: _memberNameById(
-                                      lobby,
-                                      item.ownerUserId,
-                                    ),
-                                    canEdit: canEditCart &&
-                                        item.isOwnedBy(data.currentUser.id),
-                                    onEdit: () => _editCartItem(lobby, item),
-                                    onDelete: () =>
-                                        _deleteCartItem(lobby, item),
-                                  ),
-                              if (isMember && !lobby.canEditCart)
-                                const _CompactMutedText(
-                                  'Editing is unavailable after lock.',
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     if (shouldShowLockCart) ...[
                       const SizedBox(height: 16),
@@ -1629,7 +1638,7 @@ class _OrderProgressCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '$currentTotalAmount / $minimumOrderAmount',
+                '₩$currentTotalAmount / ₩$minimumOrderAmount',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: colorScheme.onSurface,
                       fontWeight: FontWeight.w800,
@@ -1671,7 +1680,7 @@ class _CompactPanel extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border.all(
@@ -1682,22 +1691,25 @@ class _CompactPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+          SizedBox(
+            height: 32,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
                 ),
-              ),
-              if (action != null) action!,
-            ],
+                if (action != null) action!,
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           ...children,
         ],
       ),
@@ -1729,6 +1741,7 @@ class _AddItemIconButton extends StatelessWidget {
 class _CompactMemberRow extends StatelessWidget {
   const _CompactMemberRow({
     required this.member,
+    this.showDivider = true,
     required this.canKick,
     required this.isKicking,
     required this.canTransferHost,
@@ -1739,6 +1752,7 @@ class _CompactMemberRow extends StatelessWidget {
   });
 
   final LobbyMember member;
+  final bool showDivider;
   final bool canKick;
   final bool isKicking;
   final bool canTransferHost;
@@ -1759,30 +1773,56 @@ class _CompactMemberRow extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF7F9FF),
-          borderRadius: BorderRadius.circular(10),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: showDivider
+            ? BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: AppColors.inputBorder.withValues(alpha: 0.55),
+                  ),
+                ),
+              )
+            : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  member.isHost ? Icons.star_outline : Icons.person_outline,
-                  size: 17,
-                  color: const Color(0xFF0054FF),
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Icon(
+                    member.isHost ? Icons.star_outline : Icons.person_outline,
+                    size: 17,
+                    color: const Color(0xFF0054FF),
+                  ),
                 ),
-                const SizedBox(width: 5),
+                const SizedBox(width: 7),
                 Expanded(
-                  child: Text(
-                    member.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        member.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        trustScoreText == null
+                            ? member.roleInLobby
+                            : '${member.roleInLobby} · $trustScoreText',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: colorScheme.outline,
+                            ),
+                      ),
+                    ],
                   ),
                 ),
                 if (isProcessing)
@@ -1818,17 +1858,6 @@ class _CompactMemberRow extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 3),
-            Text(
-              trustScoreText == null
-                  ? member.roleInLobby
-                  : '${member.roleInLobby} · $trustScoreText',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colorScheme.outline,
-                  ),
-            ),
           ],
         ),
       ),
@@ -1842,6 +1871,7 @@ class _CompactCartItemRow extends StatelessWidget {
     required this.unitPrice,
     required this.quantity,
     required this.subtotal,
+    this.showDivider = true,
     this.ownerName,
     this.canEdit = false,
     this.onEdit,
@@ -1852,6 +1882,7 @@ class _CompactCartItemRow extends StatelessWidget {
   final int unitPrice;
   final int quantity;
   final int subtotal;
+  final bool showDivider;
   final String? ownerName;
   final bool canEdit;
   final VoidCallback? onEdit;
@@ -1863,11 +1894,16 @@ class _CompactCartItemRow extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FF),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: showDivider
+          ? BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: AppColors.inputBorder.withValues(alpha: 0.55),
+                ),
+              ),
+            )
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1884,35 +1920,40 @@ class _CompactCartItemRow extends StatelessWidget {
                 ),
               ),
               if (canEdit)
-                PopupMenuButton<_CartItemAction>(
-                  tooltip: 'Cart item actions',
-                  padding: EdgeInsets.zero,
-                  onSelected: (action) {
-                    if (action == _CartItemAction.edit) {
-                      onEdit?.call();
-                    } else {
-                      onDelete?.call();
-                    }
-                  },
-                  itemBuilder: (context) {
-                    return const [
-                      PopupMenuItem<_CartItemAction>(
-                        value: _CartItemAction.edit,
-                        child: Text('Edit'),
-                      ),
-                      PopupMenuItem<_CartItemAction>(
-                        value: _CartItemAction.delete,
-                        child: Text('Delete'),
-                      ),
-                    ];
-                  },
+                SizedBox.square(
+                  dimension: 24,
+                  child: PopupMenuButton<_CartItemAction>(
+                    tooltip: 'Cart item actions',
+                    padding: EdgeInsets.zero,
+                    position: PopupMenuPosition.under,
+                    child: const Icon(Icons.more_horiz, size: 18),
+                    onSelected: (action) {
+                      if (action == _CartItemAction.edit) {
+                        onEdit?.call();
+                      } else {
+                        onDelete?.call();
+                      }
+                    },
+                    itemBuilder: (context) {
+                      return const [
+                        PopupMenuItem<_CartItemAction>(
+                          value: _CartItemAction.edit,
+                          child: Text('Edit'),
+                        ),
+                        PopupMenuItem<_CartItemAction>(
+                          value: _CartItemAction.delete,
+                          child: Text('Delete'),
+                        ),
+                      ];
+                    },
+                  ),
                 ),
             ],
           ),
           const SizedBox(height: 3),
           Text(
             [
-              '$unitPrice x $quantity',
+              '₩$unitPrice x $quantity',
               if (ownerName != null) ownerName!,
             ].join(' - '),
             maxLines: 1,
@@ -1923,7 +1964,7 @@ class _CompactCartItemRow extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '$subtotal',
+            '₩$subtotal',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   color: const Color(0xFF0054FF),
                   fontWeight: FontWeight.w800,
@@ -2169,12 +2210,14 @@ class _ExitLobbyAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
+    return FilledButton.icon(
       onPressed: isLoading ? null : onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFF111111),
-        backgroundColor: const Color(0xFFF2F2F2),
-        side: const BorderSide(color: Color(0xFF111111)),
+      style: FilledButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: AppColors.darkAction,
+        disabledBackgroundColor:
+            Theme.of(context).colorScheme.surfaceContainerHighest,
+        disabledForegroundColor: Theme.of(context).colorScheme.outline,
       ),
       icon: isLoading
           ? const SizedBox.square(
@@ -2202,14 +2245,41 @@ class _LockCartAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveOnPressed = isLoading || !canLock ? null : onLock;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PrimaryButton(
-          label: 'Lock Cart',
-          icon: Icons.lock_outline,
-          isLoading: isLoading,
-          onPressed: canLock ? onLock : null,
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: effectiveOnPressed == null
+                ? null
+                : [
+                    BoxShadow(
+                      color: AppColors.primaryBlue.withValues(alpha: 0.12),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+          ),
+          child: FilledButton.icon(
+            onPressed: effectiveOnPressed,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primaryBlue,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor:
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+              disabledForegroundColor: Theme.of(context).colorScheme.outline,
+            ),
+            icon: isLoading
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.lock_outline),
+            label: const Text('Lock Cart'),
+          ),
         ),
         if (disabledReason != null) ...[
           const SizedBox(height: 6),
@@ -2256,7 +2326,6 @@ class _LobbyStatusAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveOnPressed = action.enabled && !isLoading ? onPressed : null;
-    final colorScheme = Theme.of(context).colorScheme;
     final child = isLoading
         ? const SizedBox.square(
             dimension: 18,
@@ -2274,7 +2343,7 @@ class _LobbyStatusAction extends StatelessWidget {
                 ? null
                 : [
                     BoxShadow(
-                      color: colorScheme.primary.withValues(alpha: 0.12),
+                      color: AppColors.primaryBlue.withValues(alpha: 0.12),
                       blurRadius: 10,
                       offset: const Offset(0, 2),
                     ),
@@ -2282,6 +2351,13 @@ class _LobbyStatusAction extends StatelessWidget {
           ),
           child: FilledButton.icon(
             onPressed: effectiveOnPressed,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primaryBlue,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor:
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+              disabledForegroundColor: Theme.of(context).colorScheme.outline,
+            ),
             icon: Icon(action.icon),
             label: child,
           ),
@@ -2317,11 +2393,36 @@ class _JoinLobbyAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (canJoin) {
-      return PrimaryButton(
-        label: 'Join Lobby',
-        icon: Icons.login,
-        isLoading: isLoading,
-        onPressed: onJoin,
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: isLoading
+              ? null
+              : [
+                  BoxShadow(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.12),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: FilledButton.icon(
+          onPressed: isLoading ? null : onJoin,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primaryBlue,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor:
+                Theme.of(context).colorScheme.surfaceContainerHighest,
+            disabledForegroundColor: Theme.of(context).colorScheme.outline,
+          ),
+          icon: isLoading
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.login),
+          label: const Text('Join Lobby'),
+        ),
       );
     }
 

@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import '../../core/app_routes.dart';
 import '../../core/service_registry.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/auth_screen_shell.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/text_input_field.dart';
 
 // 비밀번호 재설정 링크 요청 화면입니다.
-// 실제 API는 이메일 링크를 보내지만, mock에서는 확인용 token을 다음 화면에 넘깁니다.
+// 실제 비밀번호 변경은 웹 링크에서 처리하므로 요청이 성공하면 로그인 화면으로 돌아갑니다.
 class PasswordResetRequestScreen extends StatefulWidget {
   const PasswordResetRequestScreen({super.key});
 
@@ -31,23 +32,29 @@ class _PasswordResetRequestScreenState
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Reset Password',
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      titleWidget: const AuthLogoTitle(),
+      centerTitle: true,
+      appBarBackgroundColor: authBackgroundColor,
+      body: AuthScreenBody(
         children: [
-          TextInputField(
-            controller: _emailController,
-            label: 'KAIST email ID',
-            hintText: 'example',
-            keyboardType: TextInputType.emailAddress,
-            prefixIcon: Icons.mail_outline,
-            suffixText: '@kaist.ac.kr',
-          ),
-          const SizedBox(height: 24),
-          PrimaryButton(
-            label: 'Send reset link',
-            icon: Icons.mark_email_read_outlined,
-            isLoading: _isSubmitting,
-            onPressed: _submit,
+          AuthCard(
+            children: [
+              TextInputField(
+                controller: _emailController,
+                label: 'KAIST email ID',
+                hintText: 'example',
+                keyboardType: TextInputType.emailAddress,
+                prefixIcon: Icons.mail_outline,
+                suffixText: '@kaist.ac.kr',
+              ),
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: 'Send reset link',
+                icon: Icons.mark_email_read_outlined,
+                isLoading: _isSubmitting,
+                onPressed: _submit,
+              ),
+            ],
           ),
         ],
       ),
@@ -76,7 +83,7 @@ class _PasswordResetRequestScreenState
     });
 
     try {
-      final result = await AppServices.authService.requestPasswordReset(
+      await AppServices.authService.requestPasswordReset(
         '$emailId@kaist.ac.kr',
       );
       if (!mounted) {
@@ -85,10 +92,10 @@ class _PasswordResetRequestScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Password reset link sent.')),
       );
-      await Navigator.pushNamed(
+      Navigator.pushNamedAndRemoveUntil(
         context,
-        AppRoutes.passwordResetConfirm,
-        arguments: result.mockResetToken,
+        AppRoutes.login,
+        (route) => false,
       );
     } catch (error) {
       if (!mounted) {

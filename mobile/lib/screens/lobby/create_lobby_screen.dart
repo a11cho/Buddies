@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_colors.dart';
 import '../../core/enums.dart';
 import '../../core/service_registry.dart';
 import '../../services/lobby_service.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/buddies_style.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/text_input_field.dart';
 
@@ -37,60 +39,69 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Create Lobby',
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextInputField(
-            controller: _restaurantNameController,
-            label: 'Restaurant name',
-            prefixIcon: Icons.restaurant_outlined,
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedDeliveryZone,
-            decoration: const InputDecoration(
-              labelText: 'Delivery Zone',
-              prefixIcon: Icon(Icons.place_outlined),
-              border: OutlineInputBorder(),
+      appBarBackgroundColor: AppColors.background,
+      body: BuddiesScreenBody(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            BuddiesCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextInputField(
+                    controller: _restaurantNameController,
+                    label: 'Restaurant name',
+                    prefixIcon: Icons.restaurant_outlined,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedDeliveryZone,
+                    decoration: const InputDecoration(
+                      labelText: 'Delivery Zone',
+                      prefixIcon: Icon(Icons.place_outlined),
+                    ),
+                    items: [
+                      for (final zone in DeliveryZone.values)
+                        DropdownMenuItem(
+                          value: zone,
+                          child: Text(zone),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      setState(() {
+                        _selectedDeliveryZone = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextInputField(
+                    controller: _minimumOrderAmountController,
+                    label: 'Minimum order amount',
+                    keyboardType: TextInputType.number,
+                    prefixIcon: Icons.payments_outlined,
+                  ),
+                  const SizedBox(height: 12),
+                  TextInputField(
+                    controller: _deliveryFeeController,
+                    label: 'Delivery fee',
+                    keyboardType: TextInputType.number,
+                    prefixIcon: Icons.delivery_dining_outlined,
+                  ),
+                  const SizedBox(height: 24),
+                  PrimaryButton(
+                    label: 'Create Lobby',
+                    icon: Icons.add,
+                    isLoading: _isSubmitting,
+                    onPressed: _submit,
+                  ),
+                ],
+              ),
             ),
-            items: [
-              for (final zone in DeliveryZone.values)
-                DropdownMenuItem(
-                  value: zone,
-                  child: Text(zone),
-                ),
-            ],
-            onChanged: (value) {
-              if (value == null) {
-                return;
-              }
-              setState(() {
-                _selectedDeliveryZone = value;
-              });
-            },
-          ),
-          const SizedBox(height: 12),
-          TextInputField(
-            controller: _minimumOrderAmountController,
-            label: 'Minimum order amount',
-            keyboardType: TextInputType.number,
-            prefixIcon: Icons.payments_outlined,
-          ),
-          const SizedBox(height: 12),
-          TextInputField(
-            controller: _deliveryFeeController,
-            label: 'Delivery fee',
-            keyboardType: TextInputType.number,
-            prefixIcon: Icons.delivery_dining_outlined,
-          ),
-          const SizedBox(height: 24),
-          PrimaryButton(
-            label: 'Create Lobby',
-            icon: Icons.add,
-            isLoading: _isSubmitting,
-            onPressed: _submit,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -4,6 +4,7 @@ import '../../core/app_routes.dart';
 import '../../core/service_registry.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/auth_screen_shell.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/text_input_field.dart';
 
@@ -51,52 +52,73 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Sign Up',
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      titleWidget: const AuthLogoTitle(),
+      centerTitle: true,
+      appBarBackgroundColor: authBackgroundColor,
+      body: AuthScreenBody(
         children: [
-          TextInputField(
-            controller: _emailController,
-            label: 'KAIST email ID',
-            hintText: 'example',
-            keyboardType: TextInputType.emailAddress,
-            prefixIcon: Icons.mail_outline,
-            suffixText: '@kaist.ac.kr',
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          TextInputField(
-            controller: _nameController,
-            label: 'Name',
-            prefixIcon: Icons.badge_outlined,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          TextInputField(
-            controller: _passwordController,
-            label: 'Password',
-            obscureText: true,
-            prefixIcon: Icons.lock_outline,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 8),
-          _PasswordRequirementList(password: _passwordController.text),
-          const SizedBox(height: 24),
-          PrimaryButton(
-            label: 'Request OTP',
-            icon: Icons.mark_email_read_outlined,
-            isLoading: _isSubmitting,
-            onPressed: _canRequestOtp ? _submit : null,
-          ),
-          if (!_canRequestOtp) ...[
-            const SizedBox(height: 8),
-            Text(
-              '이메일 ID, 이름, 비밀번호 조건을 모두 만족해야 합니다.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
+          AuthCard(
+            children: [
+              TextInputField(
+                controller: _emailController,
+                label: 'KAIST email ID',
+                hintText: 'example',
+                keyboardType: TextInputType.emailAddress,
+                prefixIcon: Icons.mail_outline,
+                suffixText: '@kaist.ac.kr',
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              TextInputField(
+                controller: _nameController,
+                label: 'Name',
+                prefixIcon: Icons.badge_outlined,
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              TextInputField(
+                controller: _passwordController,
+                label: 'Password',
+                obscureText: true,
+                prefixIcon: Icons.lock_outline,
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: authBackgroundColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant
+                        .withValues(alpha: 0.7),
                   ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+                ),
+                child: _PasswordRequirementList(
+                  password: _passwordController.text,
+                ),
+              ),
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: 'Request OTP',
+                icon: Icons.mark_email_read_outlined,
+                isLoading: _isSubmitting,
+                onPressed: _canRequestOtp ? _submit : null,
+              ),
+              if (!_canRequestOtp) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '이메일 ID, 이름, 비밀번호 조건을 모두 만족해야 합니다.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );
@@ -110,9 +132,7 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
       password: _passwordController.text,
     );
 
-    if (emailId.isEmpty ||
-        request.name.isEmpty ||
-        request.password.isEmpty) {
+    if (emailId.isEmpty || request.name.isEmpty || request.password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in all fields.')),
       );

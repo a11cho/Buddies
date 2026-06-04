@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_colors.dart';
 import '../../core/service_registry.dart';
 import '../../models/host_payment_info.dart';
 import '../../services/user_service.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/buddies_style.dart';
 import '../../widgets/error_message_view.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/primary_button.dart';
@@ -47,8 +49,7 @@ class _PaymentSettingsScreenState extends State<PaymentSettingsScreen> {
     }
     _bankNameController.text = paymentInfo?.bankName ?? '';
     _accountNumberController.text = paymentInfo?.accountNumber ?? '';
-    _accountHolderNameController.text =
-        paymentInfo?.accountHolderName ?? '';
+    _accountHolderNameController.text = paymentInfo?.accountHolderName ?? '';
     _loadedInitialValues = true;
   }
 
@@ -63,54 +64,64 @@ class _PaymentSettingsScreenState extends State<PaymentSettingsScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Payment Settings',
-      body: FutureBuilder<HostPaymentInfo?>(
-        future: _paymentInfoFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const LoadingView(message: 'Loading payment info...');
-          }
-          if (snapshot.hasError) {
-            return ErrorMessageView(
-              message: 'Payment 정보를 불러오지 못했습니다.',
-              onRetry: _refreshPaymentInfo,
-            );
-          }
+      appBarBackgroundColor: AppColors.background,
+      body: BuddiesScreenBody(
+        child: FutureBuilder<HostPaymentInfo?>(
+          future: _paymentInfoFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const LoadingView(message: 'Loading payment info...');
+            }
+            if (snapshot.hasError) {
+              return ErrorMessageView(
+                message: 'Payment 정보를 불러오지 못했습니다.',
+                onRetry: _refreshPaymentInfo,
+              );
+            }
 
-          _loadInitialValues(snapshot.data);
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              TextInputField(
-                controller: _bankNameController,
-                label: 'Bank name',
-                hintText: 'KakaoBank',
-                prefixIcon: Icons.account_balance_outlined,
-              ),
-              const SizedBox(height: 12),
-              TextInputField(
-                controller: _accountNumberController,
-                label: 'Account number',
-                hintText: '3333-12-1234567',
-                keyboardType: TextInputType.text,
-                prefixIcon: Icons.numbers_outlined,
-              ),
-              const SizedBox(height: 12),
-              TextInputField(
-                controller: _accountHolderNameController,
-                label: 'Account holder name',
-                hintText: 'Example User',
-                prefixIcon: Icons.badge_outlined,
-              ),
-              const SizedBox(height: 24),
-              PrimaryButton(
-                label: 'Save Payment Info',
-                icon: Icons.save_outlined,
-                isLoading: _isSubmitting,
-                onPressed: _submit,
-              ),
-            ],
-          );
-        },
+            _loadInitialValues(snapshot.data);
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                BuddiesCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextInputField(
+                        controller: _bankNameController,
+                        label: 'Bank name',
+                        hintText: 'KakaoBank',
+                        prefixIcon: Icons.account_balance_outlined,
+                      ),
+                      const SizedBox(height: 12),
+                      TextInputField(
+                        controller: _accountNumberController,
+                        label: 'Account number',
+                        hintText: '3333-12-1234567',
+                        keyboardType: TextInputType.text,
+                        prefixIcon: Icons.numbers_outlined,
+                      ),
+                      const SizedBox(height: 12),
+                      TextInputField(
+                        controller: _accountHolderNameController,
+                        label: 'Account holder name',
+                        hintText: 'Example User',
+                        prefixIcon: Icons.badge_outlined,
+                      ),
+                      const SizedBox(height: 24),
+                      PrimaryButton(
+                        label: 'Save Payment Info',
+                        icon: Icons.save_outlined,
+                        isLoading: _isSubmitting,
+                        onPressed: _submit,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

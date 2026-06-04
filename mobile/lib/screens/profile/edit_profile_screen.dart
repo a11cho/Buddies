@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/app_colors.dart';
 import '../../core/service_registry.dart';
 import '../../models/user.dart';
 import '../../services/user_service.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/buddies_style.dart';
 import '../../widgets/error_message_view.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/primary_button.dart';
@@ -62,82 +64,96 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Edit Profile',
-      body: FutureBuilder<User>(
-        future: _userFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const LoadingView(message: 'Loading profile...');
-          }
-          if (snapshot.hasError) {
-            return ErrorMessageView(
-              message: 'Profile 정보를 불러오지 못했습니다.',
-              onRetry: _refreshUser,
-            );
-          }
+      appBarBackgroundColor: AppColors.background,
+      body: BuddiesScreenBody(
+        child: FutureBuilder<User>(
+          future: _userFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const LoadingView(message: 'Loading profile...');
+            }
+            if (snapshot.hasError) {
+              return ErrorMessageView(
+                message: 'Profile 정보를 불러오지 못했습니다.',
+                onRetry: _refreshUser,
+              );
+            }
 
-          _loadInitialValues(snapshot.data!);
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Center(
-                child: Column(
-                  children: [
-                    ProfileAvatar(
-                      name: _nameController.text,
-                      profileImageUrl: _profileImageUrl,
-                      radius: 44,
+            _loadInitialValues(snapshot.data!);
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                BuddiesCard(
+                  child: Center(
+                    child: Column(
+                      children: [
+                        ProfileAvatar(
+                          name: _nameController.text,
+                          profileImageUrl: _profileImageUrl,
+                          radius: 44,
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _isSubmitting || _isUploadingPhoto
+                              ? null
+                              : _chooseProfilePhoto,
+                          icon: _isUploadingPhoto
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.photo_library_outlined),
+                          label: Text(
+                            _isUploadingPhoto ? 'Uploading...' : 'Choose Photo',
+                          ),
+                        ),
+                        if (_profileImageUrl != null) ...[
+                          const SizedBox(height: 4),
+                          TextButton.icon(
+                            onPressed: _isSubmitting || _isUploadingPhoto
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _profileImageUrl = null;
+                                    });
+                                  },
+                            icon: const Icon(Icons.close),
+                            label: const Text('Remove Photo'),
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: _isSubmitting || _isUploadingPhoto
-                          ? null
-                          : _chooseProfilePhoto,
-                      icon: _isUploadingPhoto
-                          ? const SizedBox.square(
-                              dimension: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.photo_library_outlined),
-                      label: Text(
-                        _isUploadingPhoto ? 'Uploading...' : 'Choose Photo',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                BuddiesCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextInputField(
+                        controller: _nameController,
+                        label: 'Name',
+                        prefixIcon: Icons.badge_outlined,
+                        onChanged: (_) {
+                          setState(() {});
+                        },
                       ),
-                    ),
-                    if (_profileImageUrl != null) ...[
-                      const SizedBox(height: 4),
-                      TextButton.icon(
-                        onPressed: _isSubmitting || _isUploadingPhoto
-                            ? null
-                            : () {
-                                setState(() {
-                                  _profileImageUrl = null;
-                                });
-                              },
-                        icon: const Icon(Icons.close),
-                        label: const Text('Remove Photo'),
+                      const SizedBox(height: 24),
+                      PrimaryButton(
+                        label: 'Save profile',
+                        icon: Icons.save_outlined,
+                        isLoading: _isSubmitting,
+                        onPressed: _submit,
                       ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              TextInputField(
-                controller: _nameController,
-                label: 'Name',
-                prefixIcon: Icons.badge_outlined,
-                onChanged: (_) {
-                  setState(() {});
-                },
-              ),
-              const SizedBox(height: 24),
-              PrimaryButton(
-                label: 'Save profile',
-                icon: Icons.save_outlined,
-                isLoading: _isSubmitting,
-                onPressed: _submit,
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -239,40 +255,49 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return showModalBottomSheet<ImageSource>(
       context: context,
       showDragHandle: true,
+      backgroundColor: AppColors.background,
       builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Profile photo',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.photo_library_outlined),
+        return BuddiesStyleScope(
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Profile photo',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
                   ),
-                  title: const Text('Photo Library'),
-                  onTap: () {
-                    Navigator.pop(context, ImageSource.gallery);
-                  },
-                ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.photo_camera_outlined),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                      backgroundColor: AppColors.softBlue,
+                      foregroundColor: AppColors.primaryBlue,
+                      child: Icon(Icons.photo_library_outlined),
+                    ),
+                    title: const Text('Photo Library'),
+                    onTap: () {
+                      Navigator.pop(context, ImageSource.gallery);
+                    },
                   ),
-                  title: const Text('Camera'),
-                  onTap: () {
-                    Navigator.pop(context, ImageSource.camera);
-                  },
-                ),
-              ],
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                      backgroundColor: AppColors.softBlue,
+                      foregroundColor: AppColors.primaryBlue,
+                      child: Icon(Icons.photo_camera_outlined),
+                    ),
+                    title: const Text('Camera'),
+                    onTap: () {
+                      Navigator.pop(context, ImageSource.camera);
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         );
