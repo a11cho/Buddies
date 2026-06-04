@@ -48,7 +48,7 @@ class CartItemTile extends StatelessWidget {
         ),
         subtitle: Text(
           [
-            '$unitPrice x $quantity',
+            '₩$unitPrice x $quantity',
             if (ownerName != null) ownerName!,
           ].join(' - '),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -59,7 +59,7 @@ class CartItemTile extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '$subtotal',
+              '₩$subtotal',
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),

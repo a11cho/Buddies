@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_colors.dart';
 import '../../core/service_registry.dart';
 import '../../models/order_history_item.dart';
 import '../../services/rating_service.dart';
+import '../../widgets/buddies_style.dart';
 
 // 닫힌 Lobby에 함께 있었던 사용자를 평가하는 dialog입니다.
 class RatingDialog extends StatefulWidget {
@@ -52,66 +54,77 @@ class _RatingDialogState extends State<RatingDialog> {
   @override
   Widget build(BuildContext context) {
     final targets = _targets;
-    return AlertDialog(
-      title: const Text('Rate members'),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (targets.isEmpty)
-                const Text('No members are available to rate.')
-              else
-                for (final target in targets) ...[
-                  _TargetRatingEditor(
-                    target: target,
-                    isSelected: _selectedUserIds.contains(target.userId),
-                    rating: _ratingsByUserId[target.userId] ?? 5,
-                    feedbackController: _feedbackControllers[target.userId]!,
-                    isEnabled: !_isSubmitting,
-                    onSelectedChanged: (isSelected) {
-                      setState(() {
-                        if (isSelected) {
+
+    return BuddiesStyleScope(
+      child: AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        title: Text(
+          'Rate members',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (targets.isEmpty)
+                  const Text('No members are available to rate.')
+                else
+                  for (final target in targets) ...[
+                    _TargetRatingEditor(
+                      target: target,
+                      isSelected: _selectedUserIds.contains(target.userId),
+                      rating: _ratingsByUserId[target.userId] ?? 5,
+                      feedbackController: _feedbackControllers[target.userId]!,
+                      isEnabled: !_isSubmitting,
+                      onSelectedChanged: (isSelected) {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedUserIds.add(target.userId);
+                          } else {
+                            _selectedUserIds.remove(target.userId);
+                          }
+                        });
+                      },
+                      onRatingChanged: (rating) {
+                        setState(() {
+                          _ratingsByUserId[target.userId] = rating;
                           _selectedUserIds.add(target.userId);
-                        } else {
-                          _selectedUserIds.remove(target.userId);
-                        }
-                      });
-                    },
-                    onRatingChanged: (rating) {
-                      setState(() {
-                        _ratingsByUserId[target.userId] = rating;
-                        _selectedUserIds.add(target.userId);
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                ],
-            ],
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+              ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed:
+                _isSubmitting ? null : () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: _isSubmitting || targets.isEmpty ? null : _submit,
+            icon: _isSubmitting
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.star_outline),
+            label: Text(
+              _selectedUserIds.length > 1
+                  ? 'Submit ${_selectedUserIds.length}'
+                  : 'Submit',
+            ),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _isSubmitting ? null : () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton.icon(
-          onPressed: _isSubmitting || targets.isEmpty ? null : _submit,
-          icon: _isSubmitting
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.star_outline),
-          label: Text(
-            _selectedUserIds.length > 1
-                ? 'Submit ${_selectedUserIds.length}'
-                : 'Submit',
-          ),
-        ),
-      ],
     );
   }
 
@@ -188,8 +201,9 @@ class _TargetRatingEditor extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        border: Border.all(color: colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
+        color: AppColors.inputFill,
+        border: Border.all(color: AppColors.inputBorder),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -198,11 +212,17 @@ class _TargetRatingEditor extends StatelessWidget {
           children: [
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
+              activeColor: AppColors.primaryBlue,
               value: isSelected,
               onChanged: isEnabled
                   ? (value) => onSelectedChanged(value ?? false)
                   : null,
-              title: Text(target.name),
+              title: Text(
+                target.name,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
               subtitle: Text(
                 '#${target.userId}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -223,10 +243,7 @@ class _TargetRatingEditor extends StatelessWidget {
               enabled: isEnabled && isSelected,
               minLines: 2,
               maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Feedback',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Feedback'),
             ),
           ],
         ),
@@ -251,10 +268,7 @@ class _StarRatingSelector extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return InputDecorator(
-      decoration: const InputDecoration(
-        labelText: 'Rating',
-        border: OutlineInputBorder(),
-      ),
+      decoration: const InputDecoration(labelText: 'Rating'),
       child: Row(
         children: [
           for (var value = 1; value <= 5; value += 1)
@@ -269,7 +283,7 @@ class _StarRatingSelector extends StatelessWidget {
               visualDensity: VisualDensity.compact,
               icon: Icon(
                 value <= rating ? Icons.star : Icons.star_border,
-                color: value <= rating ? Colors.amber.shade700 : null,
+                color: value <= rating ? AppColors.primaryBlue : null,
               ),
             ),
           const SizedBox(width: 8),
@@ -277,6 +291,7 @@ class _StarRatingSelector extends StatelessWidget {
             '$rating/5',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
                 ),
           ),
         ],

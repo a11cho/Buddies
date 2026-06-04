@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_routes.dart';
 import '../../core/service_registry.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/auth_screen_shell.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/text_input_field.dart';
 
@@ -31,67 +32,76 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Login',
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      titleWidget: const AuthLogoTitle(),
+      centerTitle: true,
+      appBarBackgroundColor: authBackgroundColor,
+      body: AuthScreenBody(
         children: [
-          Text(
-            'Buddies',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Sign in to continue',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 24),
-          TextInputField(
-            controller: _emailController,
-            label: 'KAIST email ID',
-            hintText: 'example',
-            keyboardType: TextInputType.emailAddress,
-            prefixIcon: Icons.mail_outline,
-            suffixText: '@kaist.ac.kr',
-          ),
-          const SizedBox(height: 12),
-          TextInputField(
-            controller: _passwordController,
-            label: 'Password',
-            obscureText: true,
-            prefixIcon: Icons.lock_outline,
-          ),
-          const SizedBox(height: 24),
-          PrimaryButton(
-            label: 'Login',
-            icon: Icons.login,
-            isLoading: _isSubmitting,
-            onPressed: _submit,
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: _isSubmitting
-                ? null
-                : () async {
-                    final shouldClearFields = await Navigator.pushNamed(
-                      context,
-                      AppRoutes.signupRequest,
-                    );
-                    if (!mounted) {
-                      return;
-                    }
-                    if (shouldClearFields == true) {
-                      _emailController.clear();
-                      _passwordController.clear();
-                    }
-                  },
-            child: const Text('Create account'),
-          ),
-          TextButton(
-            onPressed: _isSubmitting
-                ? null
-                : () {
-                    Navigator.pushNamed(context, AppRoutes.passwordResetRequest);
-                  },
-            child: const Text('Forgot password?'),
+          AuthCard(
+            children: [
+              TextInputField(
+                controller: _emailController,
+                label: 'KAIST email ID',
+                hintText: 'example',
+                keyboardType: TextInputType.emailAddress,
+                prefixIcon: Icons.mail_outline,
+                suffixText: '@kaist.ac.kr',
+              ),
+              const SizedBox(height: 12),
+              TextInputField(
+                controller: _passwordController,
+                label: 'Password',
+                obscureText: true,
+                prefixIcon: Icons.lock_outline,
+              ),
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: 'Login',
+                icon: Icons.login,
+                isLoading: _isSubmitting,
+                onPressed: _submit,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: _isSubmitting
+                          ? null
+                          : () async {
+                              final shouldClearFields =
+                                  await Navigator.pushNamed(
+                                context,
+                                AppRoutes.signupRequest,
+                              );
+                              if (!mounted) {
+                                return;
+                              }
+                              if (shouldClearFields == true) {
+                                _emailController.clear();
+                                _passwordController.clear();
+                              }
+                            },
+                      child: const Text('Create account'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextButton(
+                      onPressed: _isSubmitting
+                          ? null
+                          : () {
+                              Navigator.pushNamed(
+                                context,
+                                AppRoutes.passwordResetRequest,
+                              );
+                            },
+                      child: const Text('Forgot password?'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),

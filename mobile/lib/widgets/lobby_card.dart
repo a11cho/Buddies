@@ -123,7 +123,7 @@ class LobbyCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    '$currentTotalAmount / $minimumOrderAmount',
+                    '₩$currentTotalAmount / ₩$minimumOrderAmount',
                     style: textTheme.labelMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w700,

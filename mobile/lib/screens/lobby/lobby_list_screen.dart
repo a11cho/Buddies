@@ -447,12 +447,18 @@ class _FilterSection extends StatelessWidget {
                       items: [
                         const DropdownMenuItem<String>(
                           value: _allDeliveryZonesFilter,
-                          child: Text('All delivery zones'),
+                          child: Padding(
+                            padding: EdgeInsets.only(left: 6),
+                            child: Text('All delivery zones'),
+                          ),
                         ),
                         for (final zone in DeliveryZone.values)
                           DropdownMenuItem<String>(
                             value: zone,
-                            child: Text(zone),
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 6),
+                              child: Text(zone),
+                            ),
                           ),
                       ],
                       onChanged: onDeliveryZoneChanged,

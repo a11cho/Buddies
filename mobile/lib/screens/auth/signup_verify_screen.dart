@@ -4,6 +4,7 @@ import '../../core/app_routes.dart';
 import '../../core/service_registry.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/auth_screen_shell.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/text_input_field.dart';
 
@@ -32,39 +33,45 @@ class _SignupVerifyScreenState extends State<SignupVerifyScreen> {
 
     return AppScaffold(
       title: 'Verify OTP',
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      titleWidget: const AuthLogoTitle(),
+      centerTitle: true,
+      appBarBackgroundColor: authBackgroundColor,
+      body: AuthScreenBody(
         children: [
-          Text(
-            email,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 16),
-          TextInputField(
-            controller: _otpController,
-            label: 'OTP',
-            keyboardType: TextInputType.number,
-            prefixIcon: Icons.password_outlined,
-          ),
-          const SizedBox(height: 24),
-          PrimaryButton(
-            label: 'Verify',
-            icon: Icons.verified_outlined,
-            isLoading: _isSubmitting,
-            onPressed: () => _submit(email),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _isSubmitting || _isResending
-                ? null
-                : () => _resendOtp(email),
-            icon: _isResending
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh),
-            label: const Text('Resend OTP'),
+          AuthCard(
+            children: [
+              AuthInfoPill(
+                icon: Icons.mail_outline,
+                text: email,
+              ),
+              const SizedBox(height: 16),
+              TextInputField(
+                controller: _otpController,
+                label: 'OTP',
+                keyboardType: TextInputType.number,
+                prefixIcon: Icons.password_outlined,
+              ),
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: 'Verify',
+                icon: Icons.verified_outlined,
+                isLoading: _isSubmitting,
+                onPressed: () => _submit(email),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _isSubmitting || _isResending
+                    ? null
+                    : () => _resendOtp(email),
+                icon: _isResending
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                label: const Text('Resend OTP'),
+              ),
+            ],
           ),
         ],
       ),
