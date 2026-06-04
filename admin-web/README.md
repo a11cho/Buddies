@@ -35,6 +35,18 @@ Open `https://110.76.94.211:5173` from the external device. The admin web serves
 
 If the browser reports `ERR_SSL_VERSION_OR_CIPHER_MISMATCH`, stop the old admin web process and restart `npm run dev`. That error means port `5173` is not serving the HTTPS configuration from `vite.config.ts`.
 
+## Trusted HTTPS
+
+The `npm run dev` HTTPS server uses a development self-signed certificate. Browsers can connect, but they will still mark it as not fully secure because the certificate is not issued by a public certificate authority.
+
+For a trusted browser lock, point a real domain to the server IP and run the Caddy deployment:
+
+```bash
+BUDDIES_ADMIN_DOMAIN=admin.example.com sudo -E docker compose -f docker-compose.yml -f docker-compose.admin.yml up --build
+```
+
+Open `https://admin.example.com`. Caddy serves the built admin web on port `443`, obtains a public TLS certificate, and proxies `/api` and `/ws` to the backend container.
+
 ## Next Targets
 
 - Add Admin login and JWT storage.

@@ -1,0 +1,26 @@
+{$BUDDIES_ADMIN_DOMAIN} {
+  encode zstd gzip
+  root * /srv
+
+  handle /api/* {
+    uri strip_prefix /api
+    reverse_proxy https://backend:8443 {
+      transport http {
+        tls_insecure_skip_verify
+      }
+    }
+  }
+
+  handle /ws* {
+    reverse_proxy https://backend:8443 {
+      transport http {
+        tls_insecure_skip_verify
+      }
+    }
+  }
+
+  handle {
+    try_files {path} /index.html
+    file_server
+  }
+}

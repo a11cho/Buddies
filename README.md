@@ -47,6 +47,14 @@ docker compose up --build
 
 Then start `admin-web` with `npm run dev` and open `https://110.76.94.211:5173` on the other device. The admin web HTTPS toggle, host, and development certificate path are hard-coded in `admin-web/vite.config.ts`; password reset emails use the external URL hard-coded in `PublicUrlBuilder` when `buddies.external-access=true`, otherwise they use `https://localhost:8443`.
 
+The Vite HTTPS server uses a self-signed development certificate, so browsers may still show "not secure". For a browser-trusted HTTPS admin page, point a real domain to the server IP and run:
+
+```bash
+BUDDIES_ADMIN_DOMAIN=admin.example.com sudo -E docker compose -f docker-compose.yml -f docker-compose.admin.yml up --build
+```
+
+Then open `https://admin.example.com`. Caddy obtains a public certificate and proxies admin API traffic to the backend container.
+
 The Docker backend image generates a local self-signed PKCS12 keystore at `/app/ssl/dev-ssl.p12` during image build.
 
 If the backend fails with `Could not load store from '/app/config/dev-ssl.p12'` and `Is a directory`, an older container/configuration is still running. Rebuild and recreate the backend container with `docker compose up --build --force-recreate`.

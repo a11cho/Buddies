@@ -1,0 +1,19 @@
+services:
+  admin-web:
+    build:
+      context: ./admin-web
+    container_name: buddies-admin-web
+    depends_on:
+      - backend
+    environment:
+      BUDDIES_ADMIN_DOMAIN: ${BUDDIES_ADMIN_DOMAIN:?Set BUDDIES_ADMIN_DOMAIN to a domain pointing to this server}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:
