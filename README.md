@@ -44,7 +44,7 @@ PowerShell:
 docker compose up --build
 ```
 
-Then start `admin-web` with `npm run dev` and open `http://<your-computer-ip>:5173` on the other device. Password reset emails use the external URL hard-coded in `PublicUrlBuilder` when `buddies.external-access=true`; otherwise they use `https://localhost:8443`.
+Then start `admin-web` with `npm run dev` and open `https://110.76.94.211:5173` on the other device. The admin web HTTPS toggle and host are hard-coded in `admin-web/vite.config.ts`; password reset emails use the external URL hard-coded in `PublicUrlBuilder` when `buddies.external-access=true`, otherwise they use `https://localhost:8443`.
 
 The Docker backend image generates a local self-signed PKCS12 keystore at `/app/ssl/dev-ssl.p12` during image build.
 

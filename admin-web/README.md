@@ -11,19 +11,26 @@ npm run dev
 
 The Vite dev server proxies `/api` and `/ws` to the HTTPS backend at `https://localhost:8443`.
 
-To test the admin web from another device on the same network, set `buddies.external-access` in `../backend/src/main/resources/application.yml` to `true` and make sure `PublicUrlBuilder.EXTERNAL_PUBLIC_BASE_URL` matches the server address. Then run the backend with:
+To expose the admin web from the Linux server, set these constants in `vite.config.ts`:
+
+```ts
+const EXTERNAL_HTTPS_ACCESS = true;
+const EXTERNAL_SERVER_HOST = '110.76.94.211';
+```
+
+Then run the backend from the repository root:
 
 ```bash
 docker compose up --build
 ```
 
-PowerShell:
+And run the admin web from this directory:
 
-```powershell
-docker compose up --build
+```bash
+npm run dev
 ```
 
-Then open `http://<your-computer-ip>:5173` from the other device. Password reset emails use the external URL hard-coded in `PublicUrlBuilder` when `buddies.external-access=true`; otherwise they use `https://localhost:8443`.
+Open `https://110.76.94.211:5173` from the external device. The admin web serves HTTPS directly and proxies API traffic to the backend on the same computer.
 
 ## Next Targets
 

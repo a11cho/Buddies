@@ -46,11 +46,11 @@ buddies:
   jwt:
     secret: ${BUDDIES_JWT_SECRET:change-this-development-secret-change-this}
   cors:
-    allowed-origins: ${BUDDIES_CORS_ALLOWED_ORIGINS:http://localhost:5173,https://localhost:5173}
+    allowed-origins: ${BUDDIES_CORS_ALLOWED_ORIGINS:http://localhost:5173,https://localhost:5173,https://110.76.94.211:5173}
   mail:
     from: ${BUDDIES_MAIL_FROM:no-reply@buddies.local}
-    signup-subject: ${BUDDIES_MAIL_SIGNUP_SUBJECT:Buddies 인증 코드}
-    password-reset-subject: ${BUDDIES_MAIL_PASSWORD_RESET_SUBJECT:Buddies 비밀번호 재설정}
+    signup-subject: ${BUDDIES_MAIL_SIGNUP_SUBJECT:Buddies signup code}
+    password-reset-subject: ${BUDDIES_MAIL_PASSWORD_RESET_SUBJECT:Buddies password reset}
     fail-on-send-error: ${BUDDIES_MAIL_FAIL_ON_SEND_ERROR:false}
   admin:
     bootstrap:
