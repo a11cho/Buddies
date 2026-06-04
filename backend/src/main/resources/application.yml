@@ -44,7 +44,6 @@ buddies:
       bucket-name: ${BUDDIES_GCS_BUCKET_NAME:}
       public-base-url: ${BUDDIES_GCS_PUBLIC_BASE_URL:}
       signed-url-expires-minutes: ${BUDDIES_GCS_SIGNED_URL_EXPIRES_MINUTES:15}
-  external-access: ${BUDDIES_EXTERNAL_ACCESS:false}
   jwt:
     secret: ${BUDDIES_JWT_SECRET:change-this-development-secret-change-this}
   cors:
