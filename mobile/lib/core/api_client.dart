@@ -18,11 +18,16 @@ class ApiClientConfig {
       defaultValue: false,
     ),
     this.timeout = const Duration(seconds: 20),
-  });
+    Duration? uploadTimeout,
+  }) : uploadTimeout = uploadTimeout ?? const Duration(minutes: 2);
 
   final String baseUrl;
   final bool debugLogs;
   final Duration timeout;
+  final Duration? uploadTimeout;
+
+  Duration get effectiveUploadTimeout =>
+      uploadTimeout ?? const Duration(minutes: 2);
 }
 
 class ApiException implements Exception {

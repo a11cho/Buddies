@@ -347,6 +347,8 @@ class _AppNotificationHostState extends State<AppNotificationHost>
         return '$targetName removed ${itemName ?? 'an item'} from the cart.';
       case 'payment.record_updated':
         return '$targetName payment record was updated.';
+      case 'receipt.attached':
+        return '$targetName attached the receipt.';
       default:
         return 'Lobby updated.';
     }

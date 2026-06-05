@@ -206,7 +206,7 @@ class ApiUserService implements UserService {
             },
             body: attachment.bytes,
           )
-          .timeout(_apiClient.config.timeout);
+          .timeout(_apiClient.config.effectiveUploadTimeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(
           statusCode: response.statusCode,

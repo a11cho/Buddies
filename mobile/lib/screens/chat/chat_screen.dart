@@ -674,6 +674,8 @@ class _ChatScreenState extends State<ChatScreen> {
             '${itemName ?? 'an item'} from the cart.';
       case 'payment.record_updated':
         return '${targetName ?? 'A member'} payment record was updated.';
+      case 'receipt.attached':
+        return '${targetName ?? 'The host'} attached the receipt.';
       default:
         return 'Lobby updated.';
     }

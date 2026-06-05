@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:http/http.dart' as http;
+
 import '../core/api_client.dart';
 import '../core/enums.dart';
 import '../models/cart_item.dart';
@@ -5,6 +9,7 @@ import '../models/json_parsing.dart';
 import '../models/lobby.dart';
 import '../models/lobby_member.dart';
 import '../models/payment_record.dart';
+import '../models/receipt_attachment.dart';
 import '../models/user.dart';
 import '../services/lobby_service.dart';
 
@@ -152,6 +157,76 @@ class ApiLobbyService implements LobbyService {
     return getLobbyDetail(lobbyId);
   }
 
+  @override
+  Future<ReceiptAttachment?> getReceipt(int lobbyId) async {
+    try {
+      final response = await _apiClient.get('$lobbyBasePath/$lobbyId/receipt');
+      return ReceiptAttachment.fromJson(
+        ApiResponseParser.requireObject(
+          response,
+          message: 'Invalid receipt response.',
+        ),
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 403 || error.statusCode == 404) {
+        return null;
+      }
+      rethrow;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  @override
+  Future<ReceiptAttachment> uploadReceiptImage(
+    int lobbyId,
+    ReceiptImageAttachment attachment,
+  ) async {
+    final uploadResponse = await _apiClient.post(
+      '$lobbyBasePath/$lobbyId/receipt/upload-url',
+      body: {
+        'filename': attachment.filename,
+        'contentType': attachment.contentType,
+        'fileSizeBytes': attachment.bytes.length,
+      },
+    );
+    final uploadJson = ApiResponseParser.requireObject(
+      uploadResponse,
+      message: 'Invalid receipt upload response.',
+    );
+    final uploadUrl = uploadJson['uploadUrl'] as String?;
+    final mediaUrl = uploadJson['mediaUrl'] as String?;
+    if (uploadUrl == null || uploadUrl.isEmpty) {
+      throw ApiException(
+        message: 'Receipt upload response did not include uploadUrl.',
+        responseBody: uploadResponse,
+      );
+    }
+    if (mediaUrl == null || mediaUrl.isEmpty) {
+      throw ApiException(
+        message: 'Receipt upload response did not include mediaUrl.',
+        responseBody: uploadResponse,
+      );
+    }
+
+    await _uploadReceiptBytes(uploadUrl, attachment);
+    final receiptResponse = await _apiClient.post(
+      '$lobbyBasePath/$lobbyId/receipt',
+      body: {
+        'receiptImageUrl': _resolveHttpUrl(mediaUrl).toString(),
+        'originalFilename': attachment.filename,
+        'contentType': attachment.contentType,
+        'fileSizeBytes': attachment.bytes.length,
+      },
+    );
+    return ReceiptAttachment.fromJson(
+      ApiResponseParser.requireObject(
+        receiptResponse,
+        message: 'Invalid receipt attach response.',
+      ),
+    );
+  }
+
   Future<User> _getCurrentUser() async {
     try {
       return await _getUserFrom('$userBasePath/me');
@@ -195,6 +270,45 @@ class ApiLobbyService implements LobbyService {
       response,
       message: 'Invalid payment record list response.',
     ).map(PaymentRecord.fromJson).toList();
+  }
+
+  Future<void> _uploadReceiptBytes(
+    String uploadUrl,
+    ReceiptImageAttachment attachment,
+  ) async {
+    try {
+      final response = await http
+          .put(
+            _resolveHttpUrl(uploadUrl),
+            headers: {
+              'Content-Type': attachment.contentType,
+            },
+            body: attachment.bytes,
+          )
+          .timeout(_apiClient.config.effectiveUploadTimeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(
+          statusCode: response.statusCode,
+          responseBody: response.body,
+          message: 'Receipt image upload failed.',
+        );
+      }
+    } on TimeoutException {
+      throw const ApiException(message: 'Receipt image upload timed out.');
+    } on http.ClientException {
+      throw const ApiException(
+        message: 'Image upload was blocked by the browser. '
+            'Storage CORS must allow PUT with Content-Type.',
+      );
+    }
+  }
+
+  Uri _resolveHttpUrl(String value) {
+    final parsed = Uri.parse(value);
+    if (parsed.hasScheme) {
+      return parsed;
+    }
+    return _apiClient.buildUri(value);
   }
 
   Future<_LobbyBaseResult> _getLobbyBaseOrFallback(int lobbyId) async {
@@ -302,14 +416,17 @@ class ApiLobbyService implements LobbyService {
       );
     }
     final myLobby = await _findMyLobbySummary(lobbyId);
+    final availableLobby = await _findAvailableLobbySummary(lobbyId);
     if (myLobby != null) {
+      final mergedLobby = availableLobby == null
+          ? myLobby
+          : _mergeMyLobbyWithAvailableSummary(myLobby, availableLobby);
       return _LobbyBaseResult(
-        lobby: myLobby,
+        lobby: mergedLobby,
         canAssumeCurrentUserIsActiveMember:
             myLobby.members.any((member) => member.isActive),
       );
     }
-    final availableLobby = await _findAvailableLobbySummary(lobbyId);
     if (availableLobby != null) {
       return _LobbyBaseResult(
         lobby: availableLobby,
@@ -317,6 +434,41 @@ class ApiLobbyService implements LobbyService {
       );
     }
     return null;
+  }
+
+  Lobby _mergeMyLobbyWithAvailableSummary(
+    Lobby myLobby,
+    Lobby availableLobby,
+  ) {
+    return availableLobby.copyWith(
+      minimumOrderAmount: availableLobby.orderAmountsKnown
+          ? availableLobby.minimumOrderAmount
+          : myLobby.minimumOrderAmount,
+      currentTotalAmount: availableLobby.orderAmountsKnown
+          ? availableLobby.currentTotalAmount
+          : myLobby.currentTotalAmount,
+      remainingAmount: availableLobby.orderAmountsKnown
+          ? availableLobby.remainingAmount
+          : myLobby.remainingAmount,
+      deliveryFee: availableLobby.deliveryFeeKnown
+          ? availableLobby.deliveryFee
+          : myLobby.deliveryFee,
+      members: _dedupeMembers([
+        ...availableLobby.members,
+        ...myLobby.members,
+      ]),
+      participantCount:
+          availableLobby.participantCount ?? myLobby.participantCount,
+      lastReadMessageId:
+          availableLobby.lastReadMessageId ?? myLobby.lastReadMessageId,
+      unreadCount: availableLobby.unreadCount,
+      orderAmountsKnown:
+          availableLobby.orderAmountsKnown || myLobby.orderAmountsKnown,
+      deliveryFeeKnown:
+          availableLobby.deliveryFeeKnown || myLobby.deliveryFeeKnown,
+      receiptImageUrl:
+          availableLobby.receiptImageUrl ?? myLobby.receiptImageUrl,
+    );
   }
 
   Future<Lobby> _applySummaryFields(Lobby lobby) async {
@@ -527,20 +679,67 @@ class ApiLobbyService implements LobbyService {
         json['membershipStatus'] as String? ?? MembershipStatus.active;
     final isActive = membershipStatus == MembershipStatus.active;
     final isHost = roleInLobby == RoleInLobby.host;
+    final hasCurrentTotalAmount = _hasAnyJsonKey(
+      json,
+      ['currentTotalAmount', 'currentTotal', 'totalAmount'],
+    );
+    final hasMinimumOrderAmount = _hasAnyJsonKey(
+      json,
+      ['minimumOrderAmount', 'minOrderAmount'],
+    );
+    final hasDeliveryFee = _hasAnyJsonKey(
+      json,
+      ['deliveryFee', 'deliveryCharge', 'deliveryCost', 'delivery_fee'],
+    );
+    final currentTotalAmount = parseJsonInt(
+      json['currentTotalAmount'] ??
+          json['currentTotal'] ??
+          json['totalAmount'] ??
+          0,
+      'currentTotalAmount',
+    );
+    final minimumOrderAmount = parseJsonInt(
+      json['minimumOrderAmount'] ?? json['minOrderAmount'] ?? 0,
+      'minimumOrderAmount',
+    );
+    final computedRemaining = minimumOrderAmount - currentTotalAmount;
 
     return Lobby(
       lobbyId: parseJsonInt(json['lobbyId'], 'lobbyId'),
-      hostUserId: isActive && isHost ? currentUser.id : 0,
+      hostUserId: parseNullableJsonInt(json['hostUserId'], 'hostUserId') ??
+          (isActive && isHost ? currentUser.id : 0),
       hostName: json['hostName'] as String?,
+      hostTrustScore: json['hostTrustScore'] == null
+          ? null
+          : parseJsonDouble(json['hostTrustScore'], 'hostTrustScore'),
+      hostBankName: json['hostBankName'] as String?,
+      hostAccountNumber: json['hostAccountNumber'] as String?,
+      hostAccountHolderName: json['hostAccountHolderName'] as String?,
       restaurantName: json['restaurantName'] as String? ?? '',
       deliveryZone: json['deliveryZone'] as String? ?? '',
-      minimumOrderAmount: 0,
-      currentTotalAmount: 0,
-      remainingAmount: 0,
-      deliveryFee: 0,
+      minimumOrderAmount: minimumOrderAmount,
+      currentTotalAmount: currentTotalAmount,
+      remainingAmount:
+          parseNullableJsonInt(json['remainingAmount'], 'remainingAmount') ??
+              (computedRemaining > 0 ? computedRemaining : 0),
+      deliveryFee: parseJsonInt(
+        json['deliveryFee'] ??
+            json['deliveryCharge'] ??
+            json['deliveryCost'] ??
+            json['delivery_fee'] ??
+            0,
+        'deliveryFee',
+      ),
       participantCount:
           parseNullableJsonInt(json['participantCount'], 'participantCount'),
       orderStatus: json['orderStatus'] as String? ?? LobbyStatus.waiting,
+      cartLockedAt: parseNullableDateTime(json['cartLockedAt']),
+      lastReadMessageId:
+          parseNullableJsonInt(json['lastReadMessageId'], 'lastReadMessageId'),
+      unreadCount: parseJsonInt(json['unreadCount'] ?? 0, 'unreadCount'),
+      orderAmountsKnown: hasCurrentTotalAmount && hasMinimumOrderAmount,
+      deliveryFeeKnown: hasDeliveryFee,
+      receiptImageUrl: json['receiptImageUrl'] as String?,
       members: [
         LobbyMember(
           userId: currentUser.id,
@@ -594,6 +793,10 @@ class ApiLobbyService implements LobbyService {
       return null;
     }
     return trimmed;
+  }
+
+  bool _hasAnyJsonKey(Map<String, dynamic> json, Iterable<String> keys) {
+    return keys.any(json.containsKey);
   }
 }
 

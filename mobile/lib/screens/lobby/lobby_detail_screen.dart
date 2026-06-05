@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
@@ -13,10 +14,13 @@ import '../../models/lobby.dart';
 import '../../models/lobby_member.dart';
 import '../../models/order_history_item.dart';
 import '../../models/payment_record.dart';
+import '../../models/receipt_attachment.dart';
 import '../../models/user.dart';
 import '../../services/cart_service.dart';
+import '../../services/lobby_service.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/error_message_view.dart';
+import '../../widgets/image_detail_view.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/payment_record_tile.dart';
 import '../cart/cart_item_form_dialog.dart';
@@ -32,6 +36,9 @@ class LobbyDetailScreen extends StatefulWidget {
 }
 
 class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
+  static const int _maxReceiptImageBytes = 10 * 1024 * 1024;
+
+  final ImagePicker _imagePicker = ImagePicker();
   Future<_LobbyDetailData>? _detailFuture;
   _LobbyDetailData? _cachedDetailData;
   int? _lobbyId;
@@ -40,6 +47,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
   bool _isCancelingLobby = false;
   bool _isLockingCart = false;
   bool _isUpdatingStatus = false;
+  bool _isUploadingReceipt = false;
   int? _confirmingPaymentRecordId;
   int? _kickingUserId;
   int? _transferringHostUserId;
@@ -73,6 +81,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
   Future<_LobbyDetailData> _loadDetail(int lobbyId) async {
     final user = await _loadCurrentUser();
     final lobby = await AppServices.lobbyService.getLobbyDetail(lobbyId);
+    final receipt = await _loadReceipt(lobby);
     final myActiveLobby = await AppServices.lobbyService.getMyActiveLobby();
     final currentHostHasPaymentInfo = lobby.hostUserId == user.id
         ? await _loadCurrentHostPaymentInfoStatus()
@@ -82,6 +91,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       currentUser: user,
       isInActiveLobby: myActiveLobby != null,
       currentHostHasPaymentInfo: currentHostHasPaymentInfo,
+      receipt: receipt,
     );
     if (mounted) {
       setState(() {
@@ -92,6 +102,27 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       _cachedDetailData = data;
     }
     return data;
+  }
+
+  Future<ReceiptAttachment?> _loadReceipt(Lobby lobby) async {
+    try {
+      return await AppServices.lobbyService.getReceipt(lobby.lobbyId) ??
+          _receiptFromLobby(lobby);
+    } catch (_) {
+      return _receiptFromLobby(lobby);
+    }
+  }
+
+  ReceiptAttachment? _receiptFromLobby(Lobby lobby) {
+    final receiptImageUrl = lobby.receiptImageUrl;
+    if (receiptImageUrl == null || receiptImageUrl.isEmpty) {
+      return null;
+    }
+    return ReceiptAttachment(
+      lobbyId: lobby.lobbyId,
+      receiptImageUrl: receiptImageUrl,
+      uploadedByUserId: lobby.hostUserId,
+    );
   }
 
   Future<User> _loadCurrentUser() async {
@@ -132,6 +163,134 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       return;
     }
     _refreshDetail();
+  }
+
+  Future<void> _attachReceipt(Lobby lobby) async {
+    final pickedImage = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 90,
+    );
+    if (pickedImage == null || !mounted) {
+      return;
+    }
+
+    final attachment = await _receiptAttachmentFromPickedImage(pickedImage);
+    if (attachment == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isUploadingReceipt = true;
+    });
+    try {
+      final receipt = await AppServices.lobbyService.uploadReceiptImage(
+        lobby.lobbyId,
+        attachment,
+      );
+      if (!mounted) {
+        return;
+      }
+      _replaceCachedReceipt(receipt);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Receipt attached.')),
+      );
+      _refreshDetail();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingReceipt = false;
+        });
+      }
+    }
+  }
+
+  Future<ReceiptImageAttachment?> _receiptAttachmentFromPickedImage(
+    XFile image,
+  ) async {
+    final bytes = await image.readAsBytes();
+    if (bytes.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selected image is empty.')),
+        );
+      }
+      return null;
+    }
+    if (bytes.length > _maxReceiptImageBytes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Receipt image must be under 10MB.')),
+        );
+      }
+      return null;
+    }
+
+    final contentType = image.mimeType ?? _inferImageContentType(image.name);
+    if (!_isSupportedReceiptContentType(contentType)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Only JPEG, PNG, GIF, or WebP images are supported.'),
+          ),
+        );
+      }
+      return null;
+    }
+
+    return ReceiptImageAttachment(
+      filename: image.name.isEmpty ? 'receipt.jpg' : image.name,
+      contentType: contentType,
+      bytes: bytes,
+    );
+  }
+
+  String _inferImageContentType(String filename) {
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+      return 'image/jpeg';
+    }
+    if (lower.endsWith('.png')) {
+      return 'image/png';
+    }
+    if (lower.endsWith('.gif')) {
+      return 'image/gif';
+    }
+    if (lower.endsWith('.webp')) {
+      return 'image/webp';
+    }
+    return 'application/octet-stream';
+  }
+
+  bool _isSupportedReceiptContentType(String contentType) {
+    return contentType == 'image/jpeg' ||
+        contentType == 'image/png' ||
+        contentType == 'image/gif' ||
+        contentType == 'image/webp';
+  }
+
+  void _replaceCachedReceipt(ReceiptAttachment receipt) {
+    final data = _cachedDetailData;
+    if (data == null) {
+      return;
+    }
+    final updatedData = _LobbyDetailData(
+      lobby: data.lobby.copyWith(receiptImageUrl: receipt.receiptImageUrl),
+      currentUser: data.currentUser,
+      isInActiveLobby: data.isInActiveLobby,
+      currentHostHasPaymentInfo: data.currentHostHasPaymentInfo,
+      receipt: receipt,
+    );
+    setState(() {
+      _cachedDetailData = updatedData;
+      _detailFuture = Future.value(updatedData);
+    });
   }
 
   void _syncLobbyEventSubscription(_LobbyDetailData data) {
@@ -189,6 +348,9 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
 
   bool _shouldRefreshForLobbyEvent(ChatMessage message) {
     final eventType = message.eventType?.trim();
+    if (message.isMedia && message.mediaUrl?.trim().isNotEmpty == true) {
+      return true;
+    }
     return message.isSystem && eventType != null && eventType.isNotEmpty;
   }
 
@@ -887,7 +1049,8 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       participants: participants,
       rateableParticipants: rateableParticipants,
       deliveredAt: DateTime.now(),
-      receiptImageUrl: null,
+      receiptImageUrl:
+          _cachedDetailData?.receipt?.receiptImageUrl ?? lobby.receiptImageUrl,
     );
   }
 
@@ -953,6 +1116,7 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                   lobby.orderStatus == LobbyStatus.locked);
           final canTransferHost =
               isHost && lobby.orderStatus == LobbyStatus.waiting;
+          final canAttachReceipt = isHost && _canAttachReceipt(lobby);
           final memberActionInProgress =
               _kickingUserId != null || _transferringHostUserId != null;
           final lockDisabledReason = shouldShowLockCart
@@ -985,6 +1149,26 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
             isHost,
           );
           final statusAction = _statusActionFor(lobby);
+          final Widget? hostStatusControl;
+          if (shouldShowLockCart) {
+            hostStatusControl = _LockCartAction(
+              canLock: canLockCart,
+              disabledReason: lockDisabledReason,
+              isLoading: _isLockingCart,
+              onLock: () => _lockCart(lobby),
+            );
+          } else if (isHost && statusAction != null) {
+            hostStatusControl = _LobbyStatusAction(
+              action: statusAction,
+              isLoading: _isUpdatingStatus,
+              onPressed: () => _updateLobbyStatus(
+                lobby,
+                statusAction.nextStatus,
+              ),
+            );
+          } else {
+            hostStatusControl = null;
+          }
 
           return Stack(
             fit: StackFit.expand,
@@ -998,7 +1182,10 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                     if (isMember) const _MyLobbyBanner(),
                     if (hasKnownMembership && !isMember)
                       const _PastLobbyBanner(),
-                    _LobbyStatusCard(status: lobby.orderStatus),
+                    _LobbyStatusCard(
+                      status: lobby.orderStatus,
+                      action: hostStatusControl,
+                    ),
                     const SizedBox(height: 8),
                     _LobbyOverviewPanel(
                       restaurantName: lobby.restaurantName,
@@ -1006,116 +1193,112 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                       deliveryFee: lobby.deliveryFee,
                       currentTotalAmount: lobby.currentTotalAmount,
                       minimumOrderAmount: lobby.minimumOrderAmount,
+                      orderAmountsKnown: lobby.orderAmountsKnown,
+                      deliveryFeeKnown: lobby.deliveryFeeKnown,
                     ),
-                    const SizedBox(height: 12),
-                    IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: _CompactPanel(
-                              title: _memberCountTitle(participantCount),
-                              children: [
-                                if (!canViewMembers)
-                                  const _CompactMutedText(
-                                    'Member list is unavailable.',
-                                  )
-                                else if (displayMembers.isEmpty)
-                                  const _CompactMutedText(
-                                    'Member list is unavailable.',
-                                  )
-                                else ...[
-                                  if (visibleMembers.isEmpty)
-                                    const _CompactMutedText(
-                                      'Active member list is unavailable.',
-                                    ),
-                                  for (final member in displayMembers)
-                                    _CompactMemberRow(
-                                      member: member,
-                                      showDivider:
-                                          member != displayMembers.last ||
-                                              hiddenMemberCount > 0,
-                                      canKick: canKickMembers &&
-                                          !member.isHost &&
-                                          member.isActive &&
-                                          !memberActionInProgress,
-                                      isKicking:
-                                          _kickingUserId == member.userId,
-                                      canTransferHost: canTransferHost &&
-                                          !member.isHost &&
-                                          member.isActive &&
-                                          !memberActionInProgress,
-                                      isTransferringHost:
-                                          _transferringHostUserId ==
-                                              member.userId,
-                                      onViewProfile: () => _showMemberProfile(
-                                        lobby,
-                                        member,
-                                        data.currentUser,
-                                      ),
-                                      onKick: () => _kickMember(lobby, member),
-                                      onTransferHost: () =>
-                                          _transferHost(lobby, member),
-                                    ),
-                                  if (hiddenMemberCount > 0)
-                                    _CompactMutedText(
-                                      '$hiddenMemberCount hidden by API.',
-                                    ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _CompactPanel(
-                              title: 'Cart Items',
-                              action: canEditCart
-                                  ? _AddItemIconButton(
-                                      onPressed: () => _addCartItem(lobby),
-                                    )
-                                  : null,
-                              children: [
-                                if (lobby.cartItems.isEmpty)
-                                  const _CompactMutedText('No cart items yet.')
-                                else
-                                  for (final item in lobby.cartItems)
-                                    _CompactCartItemRow(
-                                      itemName: item.itemName,
-                                      unitPrice: item.unitPrice,
-                                      quantity: item.quantity,
-                                      subtotal: item.subtotal,
-                                      showDivider:
-                                          item != lobby.cartItems.last ||
-                                              (isMember && !lobby.canEditCart),
-                                      ownerName: _memberNameById(
-                                        lobby,
-                                        item.ownerUserId,
-                                      ),
-                                      canEdit: canEditCart &&
-                                          item.isOwnedBy(data.currentUser.id),
-                                      onEdit: () => _editCartItem(lobby, item),
-                                      onDelete: () =>
-                                          _deleteCartItem(lobby, item),
-                                    ),
-                                if (isMember && !lobby.canEditCart)
-                                  const _CompactMutedText(
-                                    'Editing is unavailable after lock.',
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (shouldShowLockCart) ...[
-                      const SizedBox(height: 16),
-                      _LockCartAction(
-                        canLock: canLockCart,
-                        disabledReason: lockDisabledReason,
-                        isLoading: _isLockingCart,
-                        onLock: () => _lockCart(lobby),
+                    if (data.receipt != null || canAttachReceipt) ...[
+                      const SizedBox(height: 12),
+                      _ReceiptPanel(
+                        receipt: data.receipt,
+                        canAttach: canAttachReceipt,
+                        isUploading: _isUploadingReceipt,
+                        onAttach: () => _attachReceipt(lobby),
+                        onOpen: data.receipt == null
+                            ? null
+                            : () => openImageDetailView(
+                                  context,
+                                  imageUrl: data.receipt!.receiptImageUrl,
+                                  title: 'Receipt',
+                                ),
                       ),
                     ],
+                    const SizedBox(height: 12),
+                    _CompactPanel(
+                      title: _memberCountTitle(participantCount),
+                      children: [
+                        if (!canViewMembers)
+                          const _CompactMutedText(
+                            'Member list is unavailable.',
+                          )
+                        else if (displayMembers.isEmpty)
+                          const _CompactMutedText(
+                            'Member list is unavailable.',
+                          )
+                        else ...[
+                          if (visibleMembers.isEmpty)
+                            const _CompactMutedText(
+                              'Active member list is unavailable.',
+                            ),
+                          for (final member in displayMembers)
+                            _CompactMemberRow(
+                              member: member,
+                              showDivider: member != displayMembers.last ||
+                                  hiddenMemberCount > 0,
+                              canKick: canKickMembers &&
+                                  !member.isHost &&
+                                  member.isActive &&
+                                  !memberActionInProgress,
+                              isKicking: _kickingUserId == member.userId,
+                              canTransferHost: canTransferHost &&
+                                  !member.isHost &&
+                                  member.isActive &&
+                                  !memberActionInProgress,
+                              isTransferringHost:
+                                  _transferringHostUserId == member.userId,
+                              onViewProfile: () => _showMemberProfile(
+                                lobby,
+                                member,
+                                data.currentUser,
+                              ),
+                              onKick: () => _kickMember(lobby, member),
+                              onTransferHost: () =>
+                                  _transferHost(lobby, member),
+                            ),
+                          if (hiddenMemberCount > 0)
+                            _CompactMutedText(
+                              '$hiddenMemberCount hidden by API.',
+                            ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _CompactPanel(
+                      title: 'Cart Items',
+                      action: canEditCart
+                          ? _AddItemIconButton(
+                              onPressed: () => _addCartItem(lobby),
+                            )
+                          : null,
+                      children: [
+                        if (!isMember)
+                          const _CompactMutedText(
+                            'Only lobby members can view cart items.',
+                          )
+                        else if (lobby.cartItems.isEmpty)
+                          const _CompactMutedText('No cart items yet.')
+                        else
+                          for (final item in lobby.cartItems)
+                            _CompactCartItemRow(
+                              itemName: item.itemName,
+                              unitPrice: item.unitPrice,
+                              quantity: item.quantity,
+                              subtotal: item.subtotal,
+                              showDivider: item != lobby.cartItems.last,
+                              ownerName: _memberNameById(
+                                lobby,
+                                item.ownerUserId,
+                              ),
+                              canEdit: canEditCart &&
+                                  item.isOwnedBy(data.currentUser.id),
+                              onEdit: () => _editCartItem(lobby, item),
+                              onDelete: () => _deleteCartItem(lobby, item),
+                            ),
+                        if (isMember && !lobby.canEditCart)
+                          const _CompactMutedText(
+                            'Editing is unavailable after lock.',
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: 16),
                     _SectionHeader(
                       title: isHost ? 'Payment Records' : 'My Payment',
@@ -1155,17 +1338,6 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                         lobby: lobby,
                         onCopyAccountNumber: () =>
                             _copyHostAccountNumber(lobby),
-                      ),
-                    ],
-                    if (isHost && statusAction != null) ...[
-                      const SizedBox(height: 16),
-                      _LobbyStatusAction(
-                        action: statusAction,
-                        isLoading: _isUpdatingStatus,
-                        onPressed: () => _updateLobbyStatus(
-                          lobby,
-                          statusAction.nextStatus,
-                        ),
                       ),
                     ],
                     if (showJoinAction) ...[
@@ -1317,6 +1489,12 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
         lobby.orderStatus != LobbyStatus.canceled;
   }
 
+  bool _canAttachReceipt(Lobby lobby) {
+    return lobby.orderStatus == LobbyStatus.orderPlaced ||
+        lobby.orderStatus == LobbyStatus.outForDelivery ||
+        lobby.orderStatus == LobbyStatus.delivered;
+  }
+
   _LobbyStatusActionData? _statusActionFor(Lobby lobby) {
     switch (lobby.orderStatus) {
       case LobbyStatus.locked:
@@ -1361,12 +1539,14 @@ class _LobbyDetailData {
     required this.currentUser,
     required this.isInActiveLobby,
     required this.currentHostHasPaymentInfo,
+    this.receipt,
   });
 
   final Lobby lobby;
   final User currentUser;
   final bool isInActiveLobby;
   final bool? currentHostHasPaymentInfo;
+  final ReceiptAttachment? receipt;
 }
 
 class _MyLobbyBanner extends StatelessWidget {
@@ -1439,16 +1619,20 @@ class _PastLobbyBanner extends StatelessWidget {
 }
 
 class _LobbyStatusCard extends StatelessWidget {
-  const _LobbyStatusCard({required this.status});
+  const _LobbyStatusCard({
+    required this.status,
+    this.action,
+  });
 
   final String status;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border.all(
@@ -1456,23 +1640,32 @@ class _LobbyStatusCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(
-            Icons.radio_button_checked,
-            size: 18,
-            color: Color(0xFF0054FF),
+          Row(
+            children: [
+              const Icon(
+                Icons.radio_button_checked,
+                size: 20,
+                color: Color(0xFF0054FF),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  'Status',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              _BluePill(label: status),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Status',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-          ),
-          _BluePill(label: status),
+          if (action != null) ...[
+            const SizedBox(height: 12),
+            action!,
+          ],
         ],
       ),
     );
@@ -1486,6 +1679,8 @@ class _LobbyOverviewPanel extends StatelessWidget {
     required this.deliveryFee,
     required this.currentTotalAmount,
     required this.minimumOrderAmount,
+    required this.orderAmountsKnown,
+    required this.deliveryFeeKnown,
   });
 
   final String restaurantName;
@@ -1493,6 +1688,8 @@ class _LobbyOverviewPanel extends StatelessWidget {
   final int deliveryFee;
   final int currentTotalAmount;
   final int minimumOrderAmount;
+  final bool orderAmountsKnown;
+  final bool deliveryFeeKnown;
 
   @override
   Widget build(BuildContext context) {
@@ -1502,12 +1699,14 @@ class _LobbyOverviewPanel extends StatelessWidget {
         _OrderProgressCard(
           currentTotalAmount: currentTotalAmount,
           minimumOrderAmount: minimumOrderAmount,
+          amountsKnown: orderAmountsKnown,
         ),
         const SizedBox(height: 8),
         _LobbyInfoCard(
           restaurantName: restaurantName,
           deliveryZone: deliveryZone,
           deliveryFee: deliveryFee,
+          deliveryFeeKnown: deliveryFeeKnown,
         ),
       ],
     );
@@ -1519,18 +1718,20 @@ class _LobbyInfoCard extends StatelessWidget {
     required this.restaurantName,
     required this.deliveryZone,
     required this.deliveryFee,
+    required this.deliveryFeeKnown,
   });
 
   final String restaurantName;
   final String deliveryZone;
   final int deliveryFee;
+  final bool deliveryFeeKnown;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border.all(
@@ -1542,10 +1743,13 @@ class _LobbyInfoCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _CompactInfoLine(label: 'Restaurant', value: restaurantName),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           _CompactInfoLine(label: 'Delivery Zone', value: deliveryZone),
-          const SizedBox(height: 10),
-          _CompactInfoLine(label: 'Delivery Fee', value: '$deliveryFee'),
+          const SizedBox(height: 12),
+          _CompactInfoLine(
+            label: 'Delivery Fee',
+            value: deliveryFeeKnown ? '₩$deliveryFee' : 'Unavailable',
+          ),
         ],
       ),
     );
@@ -1574,7 +1778,7 @@ class _CompactInfoLine extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: textTheme.labelSmall?.copyWith(
+            style: textTheme.labelMedium?.copyWith(
               color: colorScheme.outline,
               fontWeight: FontWeight.w700,
             ),
@@ -1588,8 +1792,8 @@ class _CompactInfoLine extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.end,
-            style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w700,
+            style: textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
           ),
         ),
@@ -1602,15 +1806,17 @@ class _OrderProgressCard extends StatelessWidget {
   const _OrderProgressCard({
     required this.currentTotalAmount,
     required this.minimumOrderAmount,
+    required this.amountsKnown,
   });
 
   final int currentTotalAmount;
   final int minimumOrderAmount;
+  final bool amountsKnown;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final progress = minimumOrderAmount <= 0
+    final progress = !amountsKnown || minimumOrderAmount <= 0
         ? 0.0
         : (currentTotalAmount / minimumOrderAmount).clamp(0.0, 1.0).toDouble();
 
@@ -1638,7 +1844,9 @@ class _OrderProgressCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '₩$currentTotalAmount / ₩$minimumOrderAmount',
+                amountsKnown
+                    ? '₩$currentTotalAmount / ₩$minimumOrderAmount'
+                    : 'Unavailable',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: colorScheme.onSurface,
                       fontWeight: FontWeight.w800,
@@ -1664,6 +1872,147 @@ class _OrderProgressCard extends StatelessWidget {
   }
 }
 
+class _ReceiptPanel extends StatelessWidget {
+  const _ReceiptPanel({
+    required this.receipt,
+    required this.canAttach,
+    required this.isUploading,
+    required this.onAttach,
+    required this.onOpen,
+  });
+
+  final ReceiptAttachment? receipt;
+  final bool canAttach;
+  final bool isUploading;
+  final VoidCallback onAttach;
+  final VoidCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final receiptUrl = receipt?.receiptImageUrl;
+    final canRenderImage = receiptUrl != null &&
+        (receiptUrl.startsWith('http://') || receiptUrl.startsWith('https://'));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.receipt_long_outlined,
+                size: 20,
+                color: AppColors.primaryBlue,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Receipt',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              if (canAttach)
+                TextButton.icon(
+                  onPressed: isUploading ? null : onAttach,
+                  icon: isUploading
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.upload_file_outlined, size: 18),
+                  label: Text(receipt == null ? 'Attach' : 'Replace'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (receipt == null)
+            Text(
+              canAttach
+                  ? 'Attach the final order receipt after placing the order.'
+                  : 'No receipt has been attached yet.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.outline,
+                  ),
+            )
+          else if (canRenderImage)
+            GestureDetector(
+              onTap: onOpen,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.network(
+                    receiptUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return _ReceiptFallback(label: _receiptLabel(receiptUrl));
+                    },
+                  ),
+                ),
+              ),
+            )
+          else
+            _ReceiptFallback(label: _receiptLabel(receiptUrl)),
+        ],
+      ),
+    );
+  }
+
+  String? _receiptLabel(String? value) {
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value.replaceFirst('mock-receipt://', '').split('/').last;
+  }
+}
+
+class _ReceiptFallback extends StatelessWidget {
+  const _ReceiptFallback({this.label});
+
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.softBlue,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.image_outlined,
+            color: AppColors.primaryBlue,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label == null ? 'Receipt image attached.' : 'Receipt: $label',
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.primaryBlue,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CompactPanel extends StatelessWidget {
   const _CompactPanel({
     required this.title,
@@ -1680,7 +2029,7 @@ class _CompactPanel extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border.all(
@@ -1692,7 +2041,7 @@ class _CompactPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            height: 32,
+            height: 34,
             child: Row(
               children: [
                 Expanded(
@@ -1700,7 +2049,7 @@ class _CompactPanel extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
                   ),
@@ -1806,10 +2155,9 @@ class _CompactMemberRow extends StatelessWidget {
                         member.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style:
-                            Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
                       ),
                       const SizedBox(height: 3),
                       Text(
@@ -1818,7 +2166,7 @@ class _CompactMemberRow extends StatelessWidget {
                             : '${member.roleInLobby} · $trustScoreText',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: colorScheme.outline,
                             ),
                       ),
@@ -1914,7 +2262,7 @@ class _CompactCartItemRow extends StatelessWidget {
                   itemName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
                 ),
@@ -1958,14 +2306,14 @@ class _CompactCartItemRow extends StatelessWidget {
             ].join(' - '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: colorScheme.outline,
                 ),
           ),
           const SizedBox(height: 4),
           Text(
             '₩$subtotal',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: const Color(0xFF0054FF),
                   fontWeight: FontWeight.w800,
                 ),
@@ -1987,7 +2335,7 @@ class _CompactMutedText extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Text(
         text,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.outline,
             ),
       ),
@@ -2008,10 +2356,10 @@ class _BluePill extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         child: Text(
           label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: const Color(0xFF0054FF),
                 fontWeight: FontWeight.w800,
               ),

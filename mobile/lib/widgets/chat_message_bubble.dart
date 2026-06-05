@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/enums.dart';
+import 'image_detail_view.dart';
 
 // Chat 화면에서 메시지 하나를 보여줄 component입니다.
 // messageType과 isMine에 따라 정렬과 표시 방식을 바꿉니다.
@@ -118,35 +119,42 @@ class _MediaAttachment extends StatelessWidget {
         (url.startsWith('http://') || url.startsWith('https://'));
 
     if (canRenderImage) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.network(
-          url,
-          width: 220,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return _MediaFallback(
-              label: label,
-              colorScheme: colorScheme,
-            );
-          },
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) {
-              return child;
-            }
-            return SizedBox(
-              width: 220,
-              height: 140,
-              child: Center(
-                child: CircularProgressIndicator(
-                  value: loadingProgress.expectedTotalBytes == null
-                      ? null
-                      : loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!,
+      return GestureDetector(
+        onTap: () => openImageDetailView(
+          context,
+          imageUrl: url,
+          title: 'Photo',
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.network(
+            url,
+            width: 220,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return _MediaFallback(
+                label: label,
+                colorScheme: colorScheme,
+              );
+            },
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) {
+                return child;
+              }
+              return SizedBox(
+                width: 220,
+                height: 140,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes == null
+                        ? null
+                        : loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!,
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       );
     }
