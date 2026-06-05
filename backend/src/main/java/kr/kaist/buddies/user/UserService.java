@@ -128,6 +128,7 @@ public class UserService {
                     WHERE payment_sum.lobby_id = l.id
                 ) AS total_amount,
                 COALESCE(my_payment.amount, 0) AS my_amount,
+                receipt.receipt_image_url,
                 EXISTS (
                     SELECT 1
                     FROM lobby_memberships peer
@@ -145,6 +146,7 @@ public class UserService {
             JOIN lobby_memberships mine ON mine.lobby_id = l.id AND mine.user_id = ?
             JOIN users host ON host.id = l.host_user_id
             LEFT JOIN payment_records my_payment ON my_payment.lobby_id = l.id AND my_payment.user_id = ?
+            LEFT JOIN receipt_attachments receipt ON receipt.lobby_id = l.id AND receipt.status = 'ACTIVE'
             WHERE l.order_status IN ('DELIVERED', 'CLOSED')
             ORDER BY l.updated_at DESC
             """;
@@ -272,7 +274,7 @@ public class UserService {
             rs.getInt("participant_count"),
             rs.getLong("total_amount"),
             rs.getLong("my_amount"),
-            null,
+            rs.getString("receipt_image_url"),
             rs.getBoolean("can_rate")
         );
     }

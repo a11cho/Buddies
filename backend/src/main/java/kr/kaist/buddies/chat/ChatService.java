@@ -144,6 +144,26 @@ public class ChatService {
     }
 
     @Transactional
+    public ChatMessageResponse publishMediaMessage(Long lobbyId, Long senderUserId, String content, String mediaUrl, String mediaPurpose) {
+        Lobby lobby = findLobby(lobbyId);
+        User sender = requireActiveUser(senderUserId);
+        ChatMessage message = chatMessageRepository.save(new ChatMessage(
+            lobby,
+            sender,
+            ChatMessageType.MEDIA,
+            normalizeContent(content),
+            normalizeMediaUrl(mediaUrl),
+            null,
+            null,
+            serializeEventMetadata(Map.of("mediaPurpose", mediaPurpose)),
+            Instant.now()
+        ));
+        ChatMessageResponse response = toResponse(message);
+        eventPublisher.publishEvent(new ChatMessagePublishedEvent(lobbyId, response));
+        return response;
+    }
+
+    @Transactional
     public ChatReadStateResponse updateReadState(Long userId, Long lobbyId, Long lastReadMessageId) {
         LobbyMembership membership = requireActiveMember(lobbyId, userId);
         if (!chatMessageRepository.existsByIdAndLobby_Id(lastReadMessageId, lobbyId)) {

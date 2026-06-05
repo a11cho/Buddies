@@ -22,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/lobbies")
 public class LobbyController {
     private final LobbyService lobbyService;
+    private final ReceiptAttachmentService receiptAttachmentService;
 
-    public LobbyController(LobbyService lobbyService) {
+    public LobbyController(LobbyService lobbyService, ReceiptAttachmentService receiptAttachmentService) {
         this.lobbyService = lobbyService;
+        this.receiptAttachmentService = receiptAttachmentService;
     }
 
     @GetMapping
@@ -98,6 +100,29 @@ public class LobbyController {
         return lobbyService.delete(user.id(), lobbyId);
     }
 
+    @PostMapping("/{lobbyId}/receipt/upload-url")
+    public ReceiptUploadUrlResponse receiptUploadUrl(
+        @CurrentUser AuthenticatedUser user,
+        @PathVariable Long lobbyId,
+        @Valid @RequestBody ReceiptUploadUrlRequest request
+    ) {
+        return receiptAttachmentService.issueUploadUrl(user.id(), lobbyId, request);
+    }
+
+    @PostMapping("/{lobbyId}/receipt")
+    public ReceiptResponse attachReceipt(
+        @CurrentUser AuthenticatedUser user,
+        @PathVariable Long lobbyId,
+        @Valid @RequestBody ReceiptAttachRequest request
+    ) {
+        return receiptAttachmentService.attach(user.id(), lobbyId, request);
+    }
+
+    @GetMapping("/{lobbyId}/receipt")
+    public ReceiptResponse receipt(@CurrentUser AuthenticatedUser user, @PathVariable Long lobbyId) {
+        return receiptAttachmentService.get(user.id(), lobbyId);
+    }
+
     public record CreateLobbyRequest(
         @NotBlank String restaurantName,
         @NotBlank String deliveryZone,
@@ -107,6 +132,14 @@ public class LobbyController {
     public record UpdateLobbyStatusRequest(@NotBlank String newStatus) {}
     public record TransferHostRequest(@NotNull Long newHostUserId) {}
     public record KickMemberRequest(@NotNull Long targetUserId, String reason) {}
+    public record ReceiptUploadUrlRequest(@NotBlank String filename, @NotBlank String contentType, Long fileSizeBytes) {}
+    public record ReceiptAttachRequest(
+        @NotBlank String receiptImageUrl,
+        String originalFilename,
+        @NotBlank String contentType,
+        Long fileSizeBytes,
+        String checksum
+    ) {}
     public record LobbySummaryResponse(
         Long lobbyId,
         Long hostUserId,
@@ -181,5 +214,7 @@ public class LobbyController {
         String newHostRole
     ) {}
     public record DeleteLobbyResponse(Long lobbyId, String previousStatus, String newStatus, String deletedAt) {}
+    public record ReceiptUploadUrlResponse(String uploadUrl, String mediaUrl, long expiresIn) {}
+    public record ReceiptResponse(Long lobbyId, String receiptImageUrl, Long uploadedByUserId, String uploadedAt) {}
     public record MessageResponse(String message) {}
 }
