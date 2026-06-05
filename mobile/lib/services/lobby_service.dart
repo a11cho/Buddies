@@ -1,5 +1,20 @@
+import 'dart:typed_data';
+
 import '../models/lobby.dart';
 import '../models/lobby_member.dart';
+import '../models/receipt_attachment.dart';
+
+class ReceiptImageAttachment {
+  const ReceiptImageAttachment({
+    required this.filename,
+    required this.contentType,
+    required this.bytes,
+  });
+
+  final String filename;
+  final String contentType;
+  final Uint8List bytes;
+}
 
 class CreateLobbyRequest {
   const CreateLobbyRequest({
@@ -49,4 +64,11 @@ abstract class LobbyService {
   Future<Lobby> kickMember(int lobbyId, int userId);
 
   Future<Lobby> updateLobbyStatus(int lobbyId, String newStatus);
+
+  Future<ReceiptAttachment?> getReceipt(int lobbyId);
+
+  Future<ReceiptAttachment> uploadReceiptImage(
+    int lobbyId,
+    ReceiptImageAttachment attachment,
+  );
 }

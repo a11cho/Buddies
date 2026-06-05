@@ -7,6 +7,7 @@ import '../../widgets/app_scaffold.dart';
 import '../../widgets/buddies_style.dart';
 import '../../widgets/empty_state_view.dart';
 import '../../widgets/error_message_view.dart';
+import '../../widgets/image_detail_view.dart';
 import '../../widgets/loading_view.dart';
 import 'rating_dialog.dart';
 
@@ -163,6 +164,17 @@ class _HistoryTile extends StatelessWidget {
                   const _HistoryChip(label: 'No receipt'),
               ],
             ),
+            if (item.receiptImageUrl != null) ...[
+              const SizedBox(height: 10),
+              _ReceiptThumbnail(
+                imageUrl: item.receiptImageUrl!,
+                onTap: () => openImageDetailView(
+                  context,
+                  imageUrl: item.receiptImageUrl!,
+                  title: 'Receipt',
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
@@ -185,6 +197,46 @@ class _HistoryTile extends StatelessWidget {
     final month = value.month.toString().padLeft(2, '0');
     final day = value.day.toString().padLeft(2, '0');
     return '${value.year}-$month-$day';
+  }
+}
+
+class _ReceiptThumbnail extends StatelessWidget {
+  const _ReceiptThumbnail({
+    required this.imageUrl,
+    required this.onTap,
+  });
+
+  final String imageUrl;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: AppColors.softBlue,
+                alignment: Alignment.center,
+                child: Text(
+                  'Receipt image unavailable',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.primaryBlue,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
   }
 }
 

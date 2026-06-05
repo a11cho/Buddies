@@ -30,6 +30,15 @@
 	<string>Buddies uses the camera to attach photos to chat messages.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Buddies uses the photo library to attach photos to chat messages.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Buddies connects to the local development server during testing.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

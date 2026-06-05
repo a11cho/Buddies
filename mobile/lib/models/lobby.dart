@@ -29,6 +29,9 @@ class Lobby {
     this.cartLockedAt,
     this.lastReadMessageId,
     this.unreadCount = 0,
+    this.orderAmountsKnown = true,
+    this.deliveryFeeKnown = true,
+    this.receiptImageUrl,
   });
 
   final int lobbyId;
@@ -49,6 +52,9 @@ class Lobby {
   final DateTime? cartLockedAt;
   final int? lastReadMessageId;
   final int unreadCount;
+  final bool orderAmountsKnown;
+  final bool deliveryFeeKnown;
+  final String? receiptImageUrl;
   final List<LobbyMember> members;
   final List<CartItem> cartItems;
   final List<PaymentRecord> paymentRecords;
@@ -87,6 +93,9 @@ class Lobby {
     DateTime? cartLockedAt,
     int? lastReadMessageId,
     int? unreadCount,
+    bool? orderAmountsKnown,
+    bool? deliveryFeeKnown,
+    String? receiptImageUrl,
     List<LobbyMember>? members,
     List<CartItem>? cartItems,
     List<PaymentRecord>? paymentRecords,
@@ -111,6 +120,9 @@ class Lobby {
       cartLockedAt: cartLockedAt ?? this.cartLockedAt,
       lastReadMessageId: lastReadMessageId ?? this.lastReadMessageId,
       unreadCount: unreadCount ?? this.unreadCount,
+      orderAmountsKnown: orderAmountsKnown ?? this.orderAmountsKnown,
+      deliveryFeeKnown: deliveryFeeKnown ?? this.deliveryFeeKnown,
+      receiptImageUrl: receiptImageUrl ?? this.receiptImageUrl,
       members: members ?? this.members,
       cartItems: cartItems ?? this.cartItems,
       paymentRecords: paymentRecords ?? this.paymentRecords,
@@ -118,10 +130,29 @@ class Lobby {
   }
 
   factory Lobby.fromJson(Map<String, dynamic> json) {
-    final currentTotalAmount =
-        parseJsonInt(json['currentTotalAmount'] ?? 0, 'currentTotalAmount');
-    final minimumOrderAmount =
-        parseJsonInt(json['minimumOrderAmount'] ?? 0, 'minimumOrderAmount');
+    final hasCurrentTotalAmount = _hasAnyKey(
+      json,
+      ['currentTotalAmount', 'currentTotal', 'totalAmount'],
+    );
+    final hasMinimumOrderAmount = _hasAnyKey(
+      json,
+      ['minimumOrderAmount', 'minOrderAmount'],
+    );
+    final hasDeliveryFee = _hasAnyKey(
+      json,
+      ['deliveryFee', 'deliveryCharge', 'deliveryCost', 'delivery_fee'],
+    );
+    final currentTotalAmount = parseJsonInt(
+      json['currentTotalAmount'] ??
+          json['currentTotal'] ??
+          json['totalAmount'] ??
+          0,
+      'currentTotalAmount',
+    );
+    final minimumOrderAmount = parseJsonInt(
+      json['minimumOrderAmount'] ?? json['minOrderAmount'] ?? 0,
+      'minimumOrderAmount',
+    );
     final computedRemaining = minimumOrderAmount - currentTotalAmount;
 
     return Lobby(
@@ -141,7 +172,14 @@ class Lobby {
       remainingAmount:
           parseNullableJsonInt(json['remainingAmount'], 'remainingAmount') ??
               (computedRemaining > 0 ? computedRemaining : 0),
-      deliveryFee: parseJsonInt(json['deliveryFee'] ?? 0, 'deliveryFee'),
+      deliveryFee: parseJsonInt(
+        json['deliveryFee'] ??
+            json['deliveryCharge'] ??
+            json['deliveryCost'] ??
+            json['delivery_fee'] ??
+            0,
+        'deliveryFee',
+      ),
       participantCount:
           parseNullableJsonInt(json['participantCount'], 'participantCount'),
       orderStatus: json['orderStatus'] as String? ?? LobbyStatus.waiting,
@@ -149,6 +187,9 @@ class Lobby {
       lastReadMessageId:
           parseNullableJsonInt(json['lastReadMessageId'], 'lastReadMessageId'),
       unreadCount: parseJsonInt(json['unreadCount'] ?? 0, 'unreadCount'),
+      orderAmountsKnown: hasCurrentTotalAmount && hasMinimumOrderAmount,
+      deliveryFeeKnown: hasDeliveryFee,
+      receiptImageUrl: json['receiptImageUrl'] as String?,
       members: parseJsonList(json['members'], LobbyMember.fromJson),
       cartItems: parseJsonList(json['cartItems'], CartItem.fromJson),
       paymentRecords:
@@ -176,10 +217,17 @@ class Lobby {
       'cartLockedAt': cartLockedAt?.toIso8601String(),
       'lastReadMessageId': lastReadMessageId,
       'unreadCount': unreadCount,
+      'orderAmountsKnown': orderAmountsKnown,
+      'deliveryFeeKnown': deliveryFeeKnown,
+      'receiptImageUrl': receiptImageUrl,
       'members': members.map((member) => member.toJson()).toList(),
       'cartItems': cartItems.map((item) => item.toJson()).toList(),
       'paymentRecords':
           paymentRecords.map((record) => record.toJson()).toList(),
     };
   }
+}
+
+bool _hasAnyKey(Map<String, dynamic> json, Iterable<String> keys) {
+  return keys.any(json.containsKey);
 }

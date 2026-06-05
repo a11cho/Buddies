@@ -4,6 +4,7 @@ import '../models/host_payment_info.dart';
 import '../models/lobby.dart';
 import '../models/lobby_member.dart';
 import '../models/payment_record.dart';
+import '../models/receipt_attachment.dart';
 import '../services/lobby_service.dart';
 import 'mock_data_store.dart';
 
@@ -66,6 +67,50 @@ class MockLobbyService implements LobbyService {
       hostAccountNumber: paymentInfo.accountNumber,
       hostAccountHolderName: paymentInfo.accountHolderName,
     );
+  }
+
+  @override
+  Future<ReceiptAttachment?> getReceipt(int lobbyId) async {
+    final lobby = _store.findLobby(lobbyId);
+    final receiptImageUrl = lobby.receiptImageUrl;
+    if (receiptImageUrl == null || receiptImageUrl.isEmpty) {
+      return null;
+    }
+    return ReceiptAttachment(
+      lobbyId: lobbyId,
+      receiptImageUrl: receiptImageUrl,
+      uploadedByUserId: lobby.hostUserId,
+    );
+  }
+
+  @override
+  Future<ReceiptAttachment> uploadReceiptImage(
+    int lobbyId,
+    ReceiptImageAttachment attachment,
+  ) async {
+    final lobby = _store.findLobby(lobbyId);
+    if (lobby.hostUserId != _store.currentUser.id) {
+      throw StateError('Only the host can attach a receipt.');
+    }
+    if (!_canAttachReceipt(lobby)) {
+      throw StateError('Receipt can be attached after order is placed.');
+    }
+    final receipt = ReceiptAttachment(
+      lobbyId: lobbyId,
+      receiptImageUrl: 'mock-receipt://${attachment.filename}',
+      uploadedByUserId: _store.currentUser.id,
+      uploadedAt: DateTime.now(),
+    );
+    _store.replaceLobby(
+      lobby.copyWith(receiptImageUrl: receipt.receiptImageUrl),
+    );
+    _store.addSystemMessage(
+      lobbyId: lobbyId,
+      eventType: 'receipt.attached',
+      content: '${_store.currentUser.name} attached a receipt.',
+      targetUserId: _store.currentUser.id,
+    );
+    return receipt;
   }
 
   @override
@@ -382,9 +427,8 @@ class MockLobbyService implements LobbyService {
         leftAt: kickedAt,
       );
     }).toList();
-    final updatedItems = lobby.cartItems
-        .where((item) => item.ownerUserId != userId)
-        .toList();
+    final updatedItems =
+        lobby.cartItems.where((item) => item.ownerUserId != userId).toList();
     final updatedTotal = _calculateCurrentTotal(updatedItems);
     final activeMembers =
         updatedMembers.where((member) => member.isActive).toList();
@@ -450,6 +494,12 @@ class MockLobbyService implements LobbyService {
     };
 
     return allowedTransitions[currentStatus] == newStatus;
+  }
+
+  bool _canAttachReceipt(Lobby lobby) {
+    return lobby.orderStatus == LobbyStatus.orderPlaced ||
+        lobby.orderStatus == LobbyStatus.outForDelivery ||
+        lobby.orderStatus == LobbyStatus.delivered;
   }
 
   List<PaymentRecord> _rebuildPaymentRecords({
