@@ -33,7 +33,13 @@ public enum LobbyErrorCode {
     NO_PAYABLE_MEMBERS("LOBBY_ERR28", "정산할 로비 멤버가 없습니다."),
     PAYMENT_ACCESS_FORBIDDEN("LOBBY_ERR29", "정산 기록에 접근할 권한이 없습니다."),
     STATUS_DIRECT_CHANGE_FORBIDDEN("LOBBY_ERR30", "요청한 상태로 직접 변경할 수 없습니다."),
-    HOST_PAYMENT_INFO_REQUIRED("LOBBY_ERR31", "계좌 정보를 등록해야 합니다.");
+    HOST_PAYMENT_INFO_REQUIRED("LOBBY_ERR31", "계좌 정보를 등록해야 합니다."),
+    RECEIPT_INVALID_LOBBY_STATUS("LOBBY_ERR32", "현재 로비 상태에서는 영수증을 첨부할 수 없습니다."),
+    INVALID_FILE_TYPE("LOBBY_ERR33", "지원하지 않는 이미지 형식입니다."),
+    FILE_TOO_LARGE("LOBBY_ERR34", "첨부 파일 크기가 너무 큽니다."),
+    INVALID_MEDIA_URL("LOBBY_ERR35", "영수증 이미지 URL이 올바르지 않습니다."),
+    RECEIPT_NOT_FOUND("LOBBY_ERR36", "등록된 영수증이 없습니다."),
+    INVALID_RECEIPT_METADATA("LOBBY_ERR37", "영수증 첨부 정보가 올바르지 않습니다.");
 
     private final String code;
     private final String message;
