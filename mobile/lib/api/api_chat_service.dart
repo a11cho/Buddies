@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/api_client.dart';
@@ -176,10 +177,11 @@ class ApiChatService implements ChatService {
       }
     } on TimeoutException {
       throw const ApiException(message: 'Image upload timed out.');
-    } on http.ClientException {
-      throw const ApiException(
-        message: 'Image upload was blocked by the browser. '
-            'Storage CORS must allow PUT with Content-Type.',
+    } on http.ClientException catch (error) {
+      throw ApiException(
+        message: kIsWeb
+            ? 'Image upload was blocked by the browser. Storage CORS must allow PUT with Content-Type.'
+            : 'Image upload connection failed: ${error.message}',
       );
     }
   }
