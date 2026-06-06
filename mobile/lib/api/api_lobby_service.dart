@@ -277,16 +277,21 @@ class ApiLobbyService implements LobbyService {
     String uploadUrl,
     ReceiptImageAttachment attachment,
   ) async {
+    final uploadUri = _resolveHttpUrl(uploadUrl);
+    _logUpload('receipt image upload target ${_safeUploadUrl(uploadUri)}');
     try {
       final response = await http
           .put(
-            _resolveHttpUrl(uploadUrl),
+            uploadUri,
             headers: {
               'Content-Type': attachment.contentType,
             },
             body: attachment.bytes,
           )
           .timeout(_apiClient.config.effectiveUploadTimeout);
+      _logUpload(
+        'receipt image upload response ${response.statusCode} ${_safeUploadUrl(uploadUri)}',
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(
           statusCode: response.statusCode,
@@ -295,14 +300,28 @@ class ApiLobbyService implements LobbyService {
         );
       }
     } on TimeoutException {
+      _logUpload('receipt image upload timeout ${_safeUploadUrl(uploadUri)}');
       throw const ApiException(message: 'Receipt image upload timed out.');
     } on http.ClientException catch (error) {
+      _logUpload(
+        'receipt image upload client error ${_safeUploadUrl(uploadUri)}: ${error.message}',
+      );
       throw ApiException(
         message: kIsWeb
             ? 'Image upload was blocked by the browser. Storage CORS must allow PUT with Content-Type.'
             : 'Receipt image upload connection failed: ${error.message}',
       );
     }
+  }
+
+  void _logUpload(String message) {
+    if (_apiClient.config.debugLogs) {
+      debugPrint('[ApiLobbyService] $message');
+    }
+  }
+
+  String _safeUploadUrl(Uri uri) {
+    return uri.replace(query: null, fragment: null).toString();
   }
 
   Uri _resolveHttpUrl(String value) {
