@@ -198,16 +198,21 @@ class ApiUserService implements UserService {
     String uploadUrl,
     ProfileImageAttachment attachment,
   ) async {
+    final uploadUri = _resolveHttpUrl(uploadUrl);
+    _logUpload('profile image upload target ${_safeUploadUrl(uploadUri)}');
     try {
       final response = await http
           .put(
-            _resolveHttpUrl(uploadUrl),
+            uploadUri,
             headers: {
               'Content-Type': attachment.contentType,
             },
             body: attachment.bytes,
           )
           .timeout(_apiClient.config.effectiveUploadTimeout);
+      _logUpload(
+        'profile image upload response ${response.statusCode} ${_safeUploadUrl(uploadUri)}',
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(
           statusCode: response.statusCode,
@@ -216,14 +221,28 @@ class ApiUserService implements UserService {
         );
       }
     } on TimeoutException {
+      _logUpload('profile image upload timeout ${_safeUploadUrl(uploadUri)}');
       throw const ApiException(message: 'Profile image upload timed out.');
     } on http.ClientException catch (error) {
+      _logUpload(
+        'profile image upload client error ${_safeUploadUrl(uploadUri)}: ${error.message}',
+      );
       throw ApiException(
         message: kIsWeb
             ? 'Image upload was blocked by the browser. Storage CORS must allow PUT with Content-Type.'
             : 'Profile image upload connection failed: ${error.message}',
       );
     }
+  }
+
+  void _logUpload(String message) {
+    if (_apiClient.config.debugLogs) {
+      debugPrint('[ApiUserService] $message');
+    }
+  }
+
+  String _safeUploadUrl(Uri uri) {
+    return uri.replace(query: null, fragment: null).toString();
   }
 
   Uri _resolveHttpUrl(String value) {
