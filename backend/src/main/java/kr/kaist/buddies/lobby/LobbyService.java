@@ -386,6 +386,7 @@ public class LobbyService {
             lobby.getMinimumOrderAmount(),
             lobby.getCurrentTotalAmount(),
             remainingAmount,
+            lobby.getDeliveryFee(),
             participantCount,
             lobby.getOrderStatus().name(),
             readState.lastReadMessageId(),
@@ -437,13 +438,19 @@ public class LobbyService {
 
     private MyLobbyResponse toMyLobbyResponse(LobbyMembership membership) {
         Lobby lobby = membership.getLobby();
+        long participantCount = lobbyMembershipRepository.countByLobby_IdAndStatus(lobby.getId(), LobbyMembershipStatus.ACTIVE);
+        long remainingAmount = Math.max(0, lobby.getMinimumOrderAmount() - lobby.getCurrentTotalAmount());
         return new MyLobbyResponse(
             lobby.getId(),
             lobby.getRestaurantName(),
             lobby.getDeliveryLocation().name(),
+            lobby.getMinimumOrderAmount(),
+            lobby.getCurrentTotalAmount(),
+            remainingAmount,
+            lobby.getDeliveryFee(),
             lobby.getOrderStatus().name(),
             lobby.getHost().getName(),
-            lobbyMembershipRepository.countByLobby_Id(lobby.getId()),
+            participantCount,
             membership.getRoleInLobby().name(),
             membership.getStatus().name(),
             membership.getJoinedAt() == null ? null : membership.getJoinedAt().toString(),
