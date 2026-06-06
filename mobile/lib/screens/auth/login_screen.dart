@@ -66,6 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextButton(
+                    style: _compactLinkButtonStyle(),
                     onPressed: _isSubmitting
                         ? null
                         : () async {
@@ -88,6 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   TextButton(
+                    style: _compactLinkButtonStyle(),
                     onPressed: _isSubmitting
                         ? null
                         : () {
@@ -108,6 +110,15 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  ButtonStyle _compactLinkButtonStyle() {
+    return TextButton.styleFrom(
+      visualDensity: VisualDensity.compact,
+      minimumSize: const Size(0, 34),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
     );
   }
 

@@ -21,3 +21,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/buddies_logo_name.png
+  fonts:
+    - family: Jalnan2
+      fonts:
+        - asset: assets/fonts/Jalnan2TTF.ttf
