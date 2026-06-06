@@ -65,8 +65,8 @@ class _RatingDialogState extends State<RatingDialog> {
                 fontWeight: FontWeight.w800,
               ),
         ),
-        content: SizedBox(
-          width: 420,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -210,26 +210,55 @@ class _TargetRatingEditor extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              activeColor: AppColors.primaryBlue,
-              value: isSelected,
-              onChanged: isEnabled
-                  ? (value) => onSelectedChanged(value ?? false)
-                  : null,
-              title: Text(
-                target.name,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: isEnabled ? () => onSelectedChanged(!isSelected) : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        activeColor: AppColors.primaryBlue,
+                        value: isSelected,
+                        onChanged: isEnabled
+                            ? (value) => onSelectedChanged(value ?? false)
+                            : null,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              target.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '#${target.userId}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: colorScheme.outline,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              subtitle: Text(
-                '#${target.userId}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.outline,
-                    ),
-              ),
-              controlAffinity: ListTileControlAffinity.leading,
             ),
             const SizedBox(height: 4),
             _StarRatingSelector(
@@ -269,7 +298,10 @@ class _StarRatingSelector extends StatelessWidget {
 
     return InputDecorator(
       decoration: const InputDecoration(labelText: 'Rating'),
-      child: Row(
+      child: Wrap(
+        spacing: 2,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           for (var value = 1; value <= 5; value += 1)
             IconButton(
@@ -286,13 +318,15 @@ class _StarRatingSelector extends StatelessWidget {
                 color: value <= rating ? AppColors.primaryBlue : null,
               ),
             ),
-          const SizedBox(width: 8),
-          Text(
-            '$rating/5',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              '$rating/5',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
           ),
         ],
       ),

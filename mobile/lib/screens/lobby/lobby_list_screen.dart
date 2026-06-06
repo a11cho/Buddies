@@ -6,6 +6,7 @@ import '../../core/service_registry.dart';
 import '../../models/lobby.dart';
 import '../../models/user.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/buddies_select_field.dart';
 import '../../widgets/empty_state_view.dart';
 import '../../widgets/error_message_view.dart';
 import '../../widgets/lobby_card.dart';
@@ -439,30 +440,26 @@ class _FilterSection extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: selectedDeliveryZone,
-                      isExpanded: true,
-                      icon: const Icon(Icons.chevron_right, size: 20),
-                      items: [
-                        const DropdownMenuItem<String>(
-                          value: _allDeliveryZonesFilter,
-                          child: Padding(
-                            padding: EdgeInsets.only(left: 6),
-                            child: Text('All delivery zones'),
-                          ),
+                  child: BuddiesSelectField<String>(
+                    label: 'Delivery Zone',
+                    value: selectedDeliveryZone,
+                    valueLabel: selectedDeliveryZone == _allDeliveryZonesFilter
+                        ? 'All delivery zones'
+                        : selectedDeliveryZone,
+                    prefixIcon: Icons.place_outlined,
+                    dense: true,
+                    options: [
+                      const BuddiesSelectOption<String>(
+                        value: _allDeliveryZonesFilter,
+                        label: 'All delivery zones',
+                      ),
+                      for (final zone in DeliveryZone.values)
+                        BuddiesSelectOption<String>(
+                          value: zone,
+                          label: zone,
                         ),
-                        for (final zone in DeliveryZone.values)
-                          DropdownMenuItem<String>(
-                            value: zone,
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 6),
-                              child: Text(zone),
-                            ),
-                          ),
-                      ],
-                      onChanged: onDeliveryZoneChanged,
-                    ),
+                    ],
+                    onChanged: onDeliveryZoneChanged,
                   ),
                 ),
                 IconButton(

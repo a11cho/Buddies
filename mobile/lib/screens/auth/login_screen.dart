@@ -62,41 +62,44 @@ class _LoginScreenState extends State<LoginScreen> {
                 onPressed: _submit,
               ),
               const SizedBox(height: 10),
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: _isSubmitting
-                          ? null
-                          : () async {
-                              final shouldClearFields =
-                                  await Navigator.pushNamed(
-                                context,
-                                AppRoutes.signupRequest,
-                              );
-                              if (!mounted) {
-                                return;
-                              }
-                              if (shouldClearFields == true) {
-                                _emailController.clear();
-                                _passwordController.clear();
-                              }
-                            },
-                      child: const Text('Create account'),
+                  TextButton(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () async {
+                            final shouldClearFields = await Navigator.pushNamed(
+                              context,
+                              AppRoutes.signupRequest,
+                            );
+                            if (!mounted) {
+                              return;
+                            }
+                            if (shouldClearFields == true) {
+                              _emailController.clear();
+                              _passwordController.clear();
+                            }
+                          },
+                    child: const Text(
+                      'Create account',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextButton(
-                      onPressed: _isSubmitting
-                          ? null
-                          : () {
-                              Navigator.pushNamed(
-                                context,
-                                AppRoutes.passwordResetRequest,
-                              );
-                            },
-                      child: const Text('Forgot password?'),
+                  TextButton(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () {
+                            Navigator.pushNamed(
+                              context,
+                              AppRoutes.passwordResetRequest,
+                            );
+                          },
+                    child: const Text(
+                      'Forgot password?',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],

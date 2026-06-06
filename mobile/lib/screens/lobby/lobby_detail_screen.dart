@@ -754,16 +754,24 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          backgroundColor: Colors.white,
           title: const Text('Transfer Host'),
           content: Text('Transfer Host role to ${member.name}?'),
           actions: [
             TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryBlue,
+              ),
               onPressed: () {
                 Navigator.pop(context, false);
               },
               child: const Text('Cancel'),
             ),
             FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () {
                 Navigator.pop(context, true);
               },
@@ -1261,84 +1269,82 @@ class _LobbyDetailScreenState extends State<LobbyDetailScreen> {
                         ],
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    _CompactPanel(
-                      title: 'Cart Items',
-                      action: canEditCart
-                          ? _AddItemIconButton(
-                              onPressed: () => _addCartItem(lobby),
-                            )
-                          : null,
-                      children: [
-                        if (!isMember)
-                          const _CompactMutedText(
-                            'Only lobby members can view cart items.',
-                          )
-                        else if (lobby.cartItems.isEmpty)
-                          const _CompactMutedText('No cart items yet.')
-                        else
-                          for (final item in lobby.cartItems)
-                            _CompactCartItemRow(
-                              itemName: item.itemName,
-                              unitPrice: item.unitPrice,
-                              quantity: item.quantity,
-                              subtotal: item.subtotal,
-                              showDivider: item != lobby.cartItems.last,
-                              ownerName: _memberNameById(
-                                lobby,
-                                item.ownerUserId,
-                              ),
-                              canEdit: canEditCart &&
-                                  item.isOwnedBy(data.currentUser.id),
-                              onEdit: () => _editCartItem(lobby, item),
-                              onDelete: () => _deleteCartItem(lobby, item),
-                            ),
-                        if (isMember && !lobby.canEditCart)
-                          const _CompactMutedText(
-                            'Editing is unavailable after lock.',
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _SectionHeader(
-                      title: isHost ? 'Payment Records' : 'My Payment',
-                    ),
-                    const SizedBox(height: 8),
-                    if (lobby.paymentRecords.isEmpty)
-                      const _MutedText(
-                        'Payment records will appear after cart lock.',
-                      )
-                    else if (isHost) ...[
-                      for (final record in lobby.paymentRecords)
-                        PaymentRecordTile(
-                          userName: _memberNameById(lobby, record.userId),
-                          amount: record.amount,
-                          status: record.status,
-                          canConfirm: isHost &&
-                              lobby.orderStatus == LobbyStatus.locked &&
-                              !record.isPaid &&
-                              _confirmingPaymentRecordId == null,
-                          onConfirm: () => _confirmPaymentRecord(
-                            lobby,
-                            record.paymentRecordId,
-                          ),
-                        ),
-                    ] else if (myPaymentRecord == null)
-                      const _MutedText('My payment record is not available.')
-                    else
-                      PaymentRecordTile(
-                        userName:
-                            _memberNameById(lobby, myPaymentRecord.userId),
-                        amount: myPaymentRecord.amount,
-                        status: myPaymentRecord.status,
-                      ),
-                    if (shouldShowTransferInfo) ...[
+                    if (isMember) ...[
                       const SizedBox(height: 12),
-                      _HostPaymentInfoPanel(
-                        lobby: lobby,
-                        onCopyAccountNumber: () =>
-                            _copyHostAccountNumber(lobby),
+                      _CompactPanel(
+                        title: 'Cart Items',
+                        action: canEditCart
+                            ? _AddItemIconButton(
+                                onPressed: () => _addCartItem(lobby),
+                              )
+                            : null,
+                        children: [
+                          if (lobby.cartItems.isEmpty)
+                            const _CompactMutedText('No cart items yet.')
+                          else
+                            for (final item in lobby.cartItems)
+                              _CompactCartItemRow(
+                                itemName: item.itemName,
+                                unitPrice: item.unitPrice,
+                                quantity: item.quantity,
+                                subtotal: item.subtotal,
+                                showDivider: item != lobby.cartItems.last,
+                                ownerName: _memberNameById(
+                                  lobby,
+                                  item.ownerUserId,
+                                ),
+                                canEdit: canEditCart &&
+                                    item.isOwnedBy(data.currentUser.id),
+                                onEdit: () => _editCartItem(lobby, item),
+                                onDelete: () => _deleteCartItem(lobby, item),
+                              ),
+                          if (!lobby.canEditCart)
+                            const _CompactMutedText(
+                              'Editing is unavailable after lock.',
+                            ),
+                        ],
                       ),
+                      const SizedBox(height: 16),
+                      _SectionHeader(
+                        title: isHost ? 'Payment Records' : 'My Payment',
+                      ),
+                      const SizedBox(height: 8),
+                      if (lobby.paymentRecords.isEmpty)
+                        const _MutedText(
+                          'Payment records will appear after cart lock.',
+                        )
+                      else if (isHost) ...[
+                        for (final record in lobby.paymentRecords)
+                          PaymentRecordTile(
+                            userName: _memberNameById(lobby, record.userId),
+                            amount: record.amount,
+                            status: record.status,
+                            canConfirm: isHost &&
+                                lobby.orderStatus == LobbyStatus.locked &&
+                                !record.isPaid &&
+                                _confirmingPaymentRecordId == null,
+                            onConfirm: () => _confirmPaymentRecord(
+                              lobby,
+                              record.paymentRecordId,
+                            ),
+                          ),
+                      ] else if (myPaymentRecord == null)
+                        const _MutedText('My payment record is not available.')
+                      else
+                        PaymentRecordTile(
+                          userName:
+                              _memberNameById(lobby, myPaymentRecord.userId),
+                          amount: myPaymentRecord.amount,
+                          status: myPaymentRecord.status,
+                        ),
+                      if (shouldShowTransferInfo) ...[
+                        const SizedBox(height: 12),
+                        _HostPaymentInfoPanel(
+                          lobby: lobby,
+                          onCopyAccountNumber: () =>
+                              _copyHostAccountNumber(lobby),
+                        ),
+                      ],
                     ],
                     if (showJoinAction) ...[
                       const SizedBox(height: 16),
@@ -2181,6 +2187,8 @@ class _CompactMemberRow extends StatelessWidget {
                 else if (hasHostAction)
                   PopupMenuButton<_MemberAction>(
                     tooltip: 'Member actions',
+                    color: Colors.white,
+                    iconColor: AppColors.primaryBlue,
                     padding: EdgeInsets.zero,
                     onSelected: (action) {
                       if (action == _MemberAction.transferHost) {
@@ -2192,14 +2200,52 @@ class _CompactMemberRow extends StatelessWidget {
                     itemBuilder: (context) {
                       return [
                         if (canTransferHost)
-                          const PopupMenuItem<_MemberAction>(
+                          PopupMenuItem<_MemberAction>(
                             value: _MemberAction.transferHost,
-                            child: Text('Transfer Host'),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.swap_horiz_rounded,
+                                  size: 18,
+                                  color: AppColors.primaryBlue,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Transfer Host',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: AppColors.primaryBlue,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ],
+                            ),
                           ),
                         if (canKick)
-                          const PopupMenuItem<_MemberAction>(
+                          PopupMenuItem<_MemberAction>(
                             value: _MemberAction.kick,
-                            child: Text('Kick'),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.person_remove_outlined,
+                                  size: 18,
+                                  color: AppColors.darkAction,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Kick',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: AppColors.darkAction,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ],
+                            ),
                           ),
                       ];
                     },
