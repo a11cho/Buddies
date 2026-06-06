@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/api_client.dart';
@@ -216,10 +217,11 @@ class ApiUserService implements UserService {
       }
     } on TimeoutException {
       throw const ApiException(message: 'Profile image upload timed out.');
-    } on http.ClientException {
-      throw const ApiException(
-        message: 'Image upload was blocked by the browser. '
-            'Storage CORS must allow PUT with Content-Type.',
+    } on http.ClientException catch (error) {
+      throw ApiException(
+        message: kIsWeb
+            ? 'Image upload was blocked by the browser. Storage CORS must allow PUT with Content-Type.'
+            : 'Profile image upload connection failed: ${error.message}',
       );
     }
   }
