@@ -158,16 +158,21 @@ class ApiChatService implements ChatService {
     String uploadUrl,
     ChatImageAttachment attachment,
   ) async {
+    final uploadUri = _resolveHttpUrl(uploadUrl);
+    _logUpload('chat image upload target ${_safeUploadUrl(uploadUri)}');
     try {
       final response = await http
           .put(
-            _resolveHttpUrl(uploadUrl),
+            uploadUri,
             headers: {
               'Content-Type': attachment.contentType,
             },
             body: attachment.bytes,
           )
           .timeout(_apiClient.config.effectiveUploadTimeout);
+      _logUpload(
+        'chat image upload response ${response.statusCode} ${_safeUploadUrl(uploadUri)}',
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(
           statusCode: response.statusCode,
@@ -176,14 +181,28 @@ class ApiChatService implements ChatService {
         );
       }
     } on TimeoutException {
+      _logUpload('chat image upload timeout ${_safeUploadUrl(uploadUri)}');
       throw const ApiException(message: 'Image upload timed out.');
     } on http.ClientException catch (error) {
+      _logUpload(
+        'chat image upload client error ${_safeUploadUrl(uploadUri)}: ${error.message}',
+      );
       throw ApiException(
         message: kIsWeb
             ? 'Image upload was blocked by the browser. Storage CORS must allow PUT with Content-Type.'
             : 'Image upload connection failed: ${error.message}',
       );
     }
+  }
+
+  void _logUpload(String message) {
+    if (_apiClient.config.debugLogs) {
+      debugPrint('[ApiChatService] $message');
+    }
+  }
+
+  String _safeUploadUrl(Uri uri) {
+    return uri.replace(query: null, fragment: null).toString();
   }
 
   Uri _resolveHttpUrl(String value) {
