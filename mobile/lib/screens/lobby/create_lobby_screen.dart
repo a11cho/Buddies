@@ -5,6 +5,7 @@ import '../../core/enums.dart';
 import '../../core/service_registry.dart';
 import '../../services/lobby_service.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/buddies_select_field.dart';
 import '../../widgets/buddies_style.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/text_input_field.dart';
@@ -54,23 +55,16 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen> {
                     prefixIcon: Icons.restaurant_outlined,
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: _selectedDeliveryZone,
-                    decoration: const InputDecoration(
-                      labelText: 'Delivery Zone',
-                      prefixIcon: Icon(Icons.place_outlined),
-                    ),
-                    items: [
+                  BuddiesSelectField<String>(
+                    label: 'Delivery Zone',
+                    value: _selectedDeliveryZone,
+                    valueLabel: _selectedDeliveryZone,
+                    prefixIcon: Icons.place_outlined,
+                    options: [
                       for (final zone in DeliveryZone.values)
-                        DropdownMenuItem(
-                          value: zone,
-                          child: Text(zone),
-                        ),
+                        BuddiesSelectOption(value: zone, label: zone),
                     ],
                     onChanged: (value) {
-                      if (value == null) {
-                        return;
-                      }
                       setState(() {
                         _selectedDeliveryZone = value;
                       });
